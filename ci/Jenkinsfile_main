@@ -1,0 +1,44 @@
+pipeline {
+    agent any
+
+    options {
+        disableConcurrentBuilds()
+        timeout(time: 15, unit: 'MINUTES')
+    }
+
+    stages {
+        stage('Deploy') {
+            steps {
+                sshPublisher(
+                    publishers: [
+                        sshPublisherDesc(
+                            configName: 'pll-mcp-main',
+                            transfers: [
+                                sshTransfer(
+                                    execCommand: """
+                                        cd mcp-pll/
+                                        git pull
+                                        docker compose down
+                                        docker compose up -d
+                                    """,
+                                    execTimeout: 900000
+                                )
+                            ],
+                            failOnError: true,
+                            verbose: true
+                        )
+                    ]
+                )
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Deploy concluído com sucesso.'
+        }
+        failure {
+            echo 'Falha no deploy — verificar logs acima.'
+        }
+    }
+}

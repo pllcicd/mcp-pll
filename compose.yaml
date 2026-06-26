@@ -1,0 +1,16 @@
+services:
+  server:
+    image: node:24-alpine
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    env_file: .env
+    volumes:
+      - .:/app
+    command: sh -c "npm install -g pnpm && pnpm install --frozen-lockfile && pnpm build && pnpm start:prod"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
