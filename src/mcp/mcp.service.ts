@@ -22,7 +22,7 @@ export class McpService implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    this.cmvBaseUrl = `${this.config.getOrThrow<string>('B2B_BASE_URL')}/nasajon/reports/cmv`;
+    this.cmvBaseUrl = `${this.config.getOrThrow<string>('GRUPOPLL_API_URL')}/nasajon/reports/cmv`;
   }
 
   private async fetchCmvReport(path: string, database: string): Promise<{ url: string; expiresAt: string }> {
