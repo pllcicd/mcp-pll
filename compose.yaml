@@ -7,7 +7,7 @@ services:
     env_file: .env
     volumes:
       - .:/app
-    command: sh -c "npm install -g pnpm && pnpm install --frozen-lockfile && pnpm build && pnpm start:prod"
+    command: sh -c "npm ci && npm run build && npm run start:prod"
     restart: unless-stopped
     logging:
       driver: json-file
