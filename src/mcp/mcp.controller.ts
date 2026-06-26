@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { McpService } from './mcp.service';
 
-@Controller('mcp')
+@Controller()
 @UseGuards(JwtAuthGuard)
 export class McpController {
   private readonly sessions = new Map<string, StreamableHTTPServerTransport>();
