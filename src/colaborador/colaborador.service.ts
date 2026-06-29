@@ -23,7 +23,7 @@ interface ColaboradorRow extends RowDataPacket {
   email: string;
   nome: string;
   /** JSON {"crm": true, "admin": true} — chaves com true viram o array profiles */
-  acesso_perfil: string | null;
+  acesso_perfil: string | Record<string, unknown> | null;
 }
 
 @Injectable()
@@ -47,7 +47,10 @@ export class ColaboradorService {
     let profiles: string[] = [];
     if (row.acesso_perfil) {
       try {
-        const parsed: Record<string, unknown> = JSON.parse(row.acesso_perfil);
+        const parsed: Record<string, unknown> =
+          typeof row.acesso_perfil === 'string'
+            ? JSON.parse(row.acesso_perfil)
+            : row.acesso_perfil;
         profiles = Object.entries(parsed)
           .filter(([, v]) => v === true)
           .map(([k]) => k);

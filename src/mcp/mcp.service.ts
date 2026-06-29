@@ -19,7 +19,9 @@ export class McpService implements OnModuleInit {
     @Inject(DB_POOL) private readonly pool: Pool,
     private readonly config: ConfigService,
     private readonly pllAuth: PllApiAuthService,
-  ) {}
+  ) {
+    this.cmvBaseUrl = '';
+  }
 
   onModuleInit() {
     this.cmvBaseUrl = `${this.config.getOrThrow<string>('GRUPOPLL_API_URL')}/nasajon/reports/cmv`;
