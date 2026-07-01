@@ -16,7 +16,7 @@ export class PllApiAuthService implements OnModuleInit {
   constructor(private readonly config: ConfigService) {}
 
   onModuleInit() {
-    this.apiUrl   = this.config.getOrThrow<string>('GRUPOPLL_API_URL');
+    this.apiUrl = this.config.getOrThrow<string>('GRUPOPLL_API_URL');
     this.username = this.config.getOrThrow<string>('GRUPOPLL_USERNAME');
     this.password = this.config.getOrThrow<string>('GRUPOPLL_PASSWORD');
   }
@@ -28,10 +28,12 @@ export class PllApiAuthService implements OnModuleInit {
       { headers: { 'Content-Type': 'application/json' } },
     );
 
-    const token = (response.data.access_token ?? response.data.token) as string | undefined;
+    const token = (response.data.access_token ?? response.data.token) as
+      | string
+      | undefined;
     if (!token) throw new Error('Resposta de /auth/login não contém token');
 
-    this.token     = token;
+    this.token = token;
     this.expiresAt = this.parseExp(token) ?? Date.now() + 23 * 60 * 60 * 1000;
     this.logger.log('Token Grupo PLL renovado');
   }
@@ -46,7 +48,9 @@ export class PllApiAuthService implements OnModuleInit {
 
   private parseExp(jwt: string): number | null {
     try {
-      const payload = JSON.parse(Buffer.from(jwt.split('.')[1], 'base64').toString('utf8'));
+      const payload = JSON.parse(
+        Buffer.from(jwt.split('.')[1], 'base64').toString('utf8'),
+      );
       if (typeof payload.exp === 'number') {
         return (payload.exp - 60) * 1000; // 60s de buffer
       }

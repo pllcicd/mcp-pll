@@ -10,7 +10,7 @@ Implementa o fluxo OAuth 2.0 Authorization Code Flow completo, adaptado para a i
 
 ### `oauth.module.ts`
 
-Importa `AuthModule`, `ColaboradorModule` e `DatabaseModule`. Registra `OAuthService` e `OAuthController`.
+Importa `AuthModule`, `ColaboradorModule`, `DatabaseModule` e `ScopeModule`. Registra `OAuthService` e `OAuthController`.
 
 ---
 
@@ -69,12 +69,14 @@ Cria um código de autorização de uso único (UUID) e o armazena no mapa inter
 
 ---
 
-**`generateTokens(colaboradorId, scope, sessionId?)`**
+**`generateToken(colab, grants)`**
 
-Gera e persiste o par de tokens:
+Gera e persiste o par de tokens. `grants` vem de `ScopeService.resolveGrants(colab.profiles)`
+(`src/scope/scope.service.ts`), chamado pelo controller antes de gerar o token — ver
+[modules/mcp.md](mcp.md#rbac-de-ferramentas-escopos-leitura--uso).
 
 - **Access Token (JWT RS256)**:
-  - Claims: `sub` (colaboradorId), `email`, `nome`, `scope`, `jti` (UUID), `iss`, `aud` (PUBLIC_URL), `exp`
+  - Claims: `sub` (colaboradorId), `email`, `nome`, `profiles` (perfis crus, separados por espaço), `scope` (concessões resolvidas `"<ferramenta>:<ESCOPO>"`, separadas por espaço), `jti` (UUID), `iss`, `aud` (PUBLIC_URL), `exp`
   - Assinado com `KeysService.getPrivateKey()`
 
 - **Refresh Token**:
@@ -191,7 +193,7 @@ Resposta:
   "token_type": "Bearer",
   "expires_in": 3600,
   "refresh_token": "<opaque>",
-  "scope": "modulo1 modulo2"
+  "scope": "whoami:USO get_os:LEITURA get_os:USO"
 }
 ```
 

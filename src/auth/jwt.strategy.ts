@@ -11,7 +11,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     super({
       // Called per-request — by then KeysService.onModuleInit() has already run
-      secretOrKeyProvider: (_req: any, _token: any, done: (e: any, k?: any) => void) => {
+      secretOrKeyProvider: (
+        _req: any,
+        _token: any,
+        done: (e: any, k?: any) => void,
+      ) => {
         done(null, keysService.getPublicKeyPem());
       },
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -22,11 +26,31 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
+    // claim `scope`: concessões "ferramenta:ESCOPO" (ex.: "whoami:USO get_os:LEITURA").
+    const grants =
+      typeof payload.scope === 'string'
+        ? payload.scope
+            .split(' ')
+            .filter(Boolean)
+            .map((entry: string) => {
+              const i = entry.lastIndexOf(':');
+              return {
+                ferramenta: entry.slice(0, i),
+                escopo: entry.slice(i + 1),
+              };
+            })
+        : [];
+
     return {
-      userId:   payload.sub,
-      email:    payload.email,
-      nome:     payload.nome ?? '',
-      profiles: typeof payload.scope === 'string' ? payload.scope.split(' ').filter(Boolean) : [],
+      userId: payload.sub,
+      email: payload.email,
+      nome: payload.nome ?? '',
+      // claim `profiles`: perfis crus (chaves true de acesso_perfil).
+      profiles:
+        typeof payload.profiles === 'string'
+          ? payload.profiles.split(' ').filter(Boolean)
+          : [],
+      grants,
     };
   }
 }

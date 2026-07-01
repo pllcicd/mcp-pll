@@ -2,7 +2,7 @@
 
 **Nome interno:** `cmv_parts_consumption_awaiting_match`
 **Módulo:** `McpModule` (`src/mcp/mcp.service.ts`)
-**Escopos necessários:** nenhum
+**Escopos necessários:** `USO` (concedido por perfil em `mcp_perfis_escopo` — ver [modules/mcp.md](../modules/mcp.md#rbac-de-ferramentas-escopos-leitura--uso))
 
 ---
 

@@ -59,6 +59,7 @@ Claude AI (cliente MCP)
 | `OAuthModule` | Fluxo OAuth 2.0 completo (authorize, callback, token, refresh) | [modules/oauth.md](modules/oauth.md) |
 | `McpModule` | Servidor MCP, roteamento de sessões, execução de ferramentas | [modules/mcp.md](modules/mcp.md) |
 | `ColaboradorModule` | Consulta de dados do colaborador no `grupopll_master` | [modules/colaborador.md](modules/colaborador.md) |
+| `ScopeModule` | Resolve perfis → concessões ferramenta+escopo (RBAC) | [modules/scope.md](modules/scope.md) |
 | `DatabaseModule` | Pool de conexões MySQL global | [modules/database.md](modules/database.md) |
 | `B2BModule` | Cliente HTTP para a API B2B do pll-erp (legado) | [modules/b2b.md](modules/b2b.md) |
 | `UserModule` | Autenticação por senha (legado, não usado no fluxo OAuth) | [modules/user.md](modules/user.md) |
@@ -67,17 +68,30 @@ Claude AI (cliente MCP)
 
 ## Ferramentas MCP
 
-| Ferramenta | Descrição | Escopos Necessários | Documentação |
-|---|---|---|---|
-| `whoami` | Retorna informações do usuário autenticado | nenhum | [tools/whoami.md](tools/whoami.md) |
-| `get_os` | Busca uma Ordem de Serviço pelo ID | nenhum | [tools/get_os.md](tools/get_os.md) |
-| `get_service_title` | Busca o título de um tipo de serviço pelo ID | nenhum | [tools/get_service_title.md](tools/get_service_title.md) |
-| `get_status_title` | Busca o título de um status de setor pelo ID | nenhum | [tools/get_status_title.md](tools/get_status_title.md) |
-| `cmv_parts_rupture_analysis` | Relatório CMV: Análise de Ruptura de Peças | nenhum | [tools/cmv_parts_rupture_analysis.md](tools/cmv_parts_rupture_analysis.md) |
-| `cmv_parts_consumption_physical_match` | Relatório CMV: Consumo Casado Fisicamente | nenhum | [tools/cmv_parts_consumption_physical_match.md](tools/cmv_parts_consumption_physical_match.md) |
-| `cmv_parts_consumption_systemic_match` | Relatório CMV: Consumo Casado Sistemicamente | nenhum | [tools/cmv_parts_consumption_systemic_match.md](tools/cmv_parts_consumption_systemic_match.md) |
-| `cmv_parts_consumption_awaiting_match` | Relatório CMV: Consumo Aguardando Casamento | nenhum | [tools/cmv_parts_consumption_awaiting_match.md](tools/cmv_parts_consumption_awaiting_match.md) |
-| `cmv_parts_operational_loss` | Relatório CMV: Perda Operacional | nenhum | [tools/cmv_parts_operational_loss.md](tools/cmv_parts_operational_loss.md) |
+Todas as ferramentas exigem o escopo **USO** (execução) e, quando aplicável, **LEITURA**
+(ver código-fonte). Os escopos são concedidos por perfil em `mcp_perfis_escopo` — ver
+[RBAC de ferramentas](modules/mcp.md#rbac-de-ferramentas-escopos-leitura--uso).
+
+| Ferramenta | Descrição | Documentação |
+|---|---|---|
+| `whoami` | Retorna informações do usuário autenticado | [tools/whoami.md](tools/whoami.md) |
+| `get_os` | Busca uma Ordem de Serviço pelo ID | [tools/get_os.md](tools/get_os.md) |
+| `get_service_title` | Busca o título de um tipo de serviço pelo ID | [tools/get_service_title.md](tools/get_service_title.md) |
+| `get_status_title` | Busca o título de um status de setor pelo ID | [tools/get_status_title.md](tools/get_status_title.md) |
+| `cmv_parts_rupture_analysis` | Relatório CMV: Análise de Ruptura de Peças | [tools/cmv_parts_rupture_analysis.md](tools/cmv_parts_rupture_analysis.md) |
+| `cmv_parts_consumption_physical_match` | Relatório CMV: Consumo Casado Fisicamente | [tools/cmv_parts_consumption_physical_match.md](tools/cmv_parts_consumption_physical_match.md) |
+| `cmv_parts_consumption_systemic_match` | Relatório CMV: Consumo Casado Sistemicamente | [tools/cmv_parts_consumption_systemic_match.md](tools/cmv_parts_consumption_systemic_match.md) |
+| `cmv_parts_consumption_awaiting_match` | Relatório CMV: Consumo Aguardando Casamento | [tools/cmv_parts_consumption_awaiting_match.md](tools/cmv_parts_consumption_awaiting_match.md) |
+| `cmv_parts_operational_loss` | Relatório CMV: Perda Operacional | [tools/cmv_parts_operational_loss.md](tools/cmv_parts_operational_loss.md) |
+| `read_tool_source` | Lê o código-fonte `.ts` de outra ferramenta (exige LEITURA do alvo) | [tools/read_tool_source.md](tools/read_tool_source.md) |
+| `admin_register_tool` | Cadastra/atualiza uma ferramenta no registro RBAC | [tools/admin_register_tool.md](tools/admin_register_tool.md) |
+| `admin_link_tool_scope` | Vincula um escopo a uma ferramenta | [tools/admin_link_tool_scope.md](tools/admin_link_tool_scope.md) |
+| `admin_grant_perfil_scope` | Concede um escopo de ferramenta a um perfil | [tools/admin_grant_perfil_scope.md](tools/admin_grant_perfil_scope.md) |
+| `admin_revoke_perfil_scope` | Revoga (soft-delete) um escopo de ferramenta de um perfil | [tools/admin_revoke_perfil_scope.md](tools/admin_revoke_perfil_scope.md) |
+| `admin_list_grants` | Lista as concessões RBAC atuais | [tools/admin_list_grants.md](tools/admin_list_grants.md) |
+
+> Como adicionar uma nova ferramenta (padrão de código, cadastro nas tabelas RBAC,
+> concessão de escopo): [adicionar-ferramenta.md](adicionar-ferramenta.md).
 
 ---
 
@@ -121,6 +135,11 @@ Claude AI (cliente MCP)
 | `oauth_tokens` | Tokens emitidos (access + refresh), suporte a revogação |
 | `oauth_access_log` | Log de autenticações (colaborador, IP, timestamp) |
 | `oauth_execution_log` | Log de execuções de ferramentas MCP |
+| `mcp_ferramentas` | Registro de ferramentas MCP (RBAC) |
+| `mcp_escopos` | Catálogo de escopos (`LEITURA`, `USO`) |
+| `mcp_ferramentas_escopo` | Vínculo ferramenta ↔ escopo |
+| `mcp_perfis_escopo` | Concessão de escopo por perfil (RBAC) |
+| `mcp_ferramentas_log`, `mcp_escopos_log`, `mcp_ferramentas_escopo_log`, `mcp_perfis_escopo_log` | Versionamento (triggers `AFTER INSERT` / `BEFORE UPDATE`) das tabelas RBAC acima |
 
 ### Bancos Externos (somente leitura)
 
@@ -148,6 +167,7 @@ Claude AI (cliente MCP)
 | `OAUTH_SECRET` | Segredo HMAC compartilhado com o pll-erp para validação de códigos |
 | `B2B_LOGIN_URL` | URL da API B2B do pll-erp |
 | `B2B_API_TOKEN` | Token de acesso à API B2B |
+| `SOURCE_ROOT` | Raiz do repo usada por `read_tool_source` para resolver `src/tools/<arquivo>` (padrão: `process.cwd()`) |
 
 ---
 

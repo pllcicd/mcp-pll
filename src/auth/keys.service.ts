@@ -1,7 +1,13 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createPrivateKey, createPublicKey } from 'crypto';
-import { exportJWK, exportSPKI, generateKeyPair, importPKCS8, importSPKI } from 'jose';
+import {
+  exportJWK,
+  exportSPKI,
+  generateKeyPair,
+  importPKCS8,
+  importSPKI,
+} from 'jose';
 import type { CryptoKey } from 'jose';
 
 @Injectable()
@@ -23,10 +29,14 @@ export class KeysService implements OnModuleInit {
       const publicPem = Buffer.from(publicB64, 'base64').toString('utf8');
 
       // Node.js crypto aceita PKCS#1 e PKCS#8; normaliza para o formato que o jose exige
-      const pkcs8Pem = createPrivateKey(privatePem)
-        .export({ type: 'pkcs8', format: 'pem' }) as string;
-      const spkiPem = createPublicKey(publicPem)
-        .export({ type: 'spki', format: 'pem' }) as string;
+      const pkcs8Pem = createPrivateKey(privatePem).export({
+        type: 'pkcs8',
+        format: 'pem',
+      }) as string;
+      const spkiPem = createPublicKey(publicPem).export({
+        type: 'spki',
+        format: 'pem',
+      }) as string;
 
       this.privateKey = await importPKCS8(pkcs8Pem, 'RS256');
       this.publicKey = await importSPKI(spkiPem, 'RS256');

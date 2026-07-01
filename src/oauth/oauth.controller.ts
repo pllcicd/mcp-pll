@@ -14,6 +14,7 @@ import { ConfigService } from '@nestjs/config';
 import { OAuthService } from './oauth.service';
 import { ColaboradorService } from '../colaborador/colaborador.service';
 import { KeysService } from '../auth/keys.service';
+import { ScopeService } from '../scope/scope.service';
 
 @Controller()
 export class OAuthController {
@@ -22,6 +23,7 @@ export class OAuthController {
     private readonly colaborador: ColaboradorService,
     private readonly keys: KeysService,
     private readonly config: ConfigService,
+    private readonly scopeService: ScopeService,
   ) {}
 
   // ─── Discovery / JWKS ─────────────────────────────────────────────────────
@@ -46,12 +48,12 @@ export class OAuthController {
   register(@Req() req: Request) {
     const body = req.body as Record<string, any>;
     return {
-      client_id:                randomBytes(16).toString('hex'),
-      client_id_issued_at:      Math.floor(Date.now() / 1000),
-      redirect_uris:            body.redirect_uris ?? [],
+      client_id: randomBytes(16).toString('hex'),
+      client_id_issued_at: Math.floor(Date.now() / 1000),
+      redirect_uris: body.redirect_uris ?? [],
       token_endpoint_auth_method: 'none',
-      grant_types:              ['authorization_code'],
-      response_types:           ['code'],
+      grant_types: ['authorization_code'],
+      response_types: ['code'],
     };
   }
 
@@ -73,11 +75,14 @@ export class OAuthController {
       );
     }
 
-    const publicUrl    = this.config.getOrThrow<string>('PUBLIC_URL');
-    const b2bLoginUrl  = this.config.getOrThrow<string>('B2B_LOGIN_URL');
-    const callbackUri  = `${publicUrl}/oauth/callback`;
+    const publicUrl = this.config.getOrThrow<string>('PUBLIC_URL');
+    const b2bLoginUrl = this.config.getOrThrow<string>('B2B_LOGIN_URL');
+    const callbackUri = `${publicUrl}/oauth/callback`;
 
-    const ourState = this.oauthService.createPendingState(claudeRedirectUri, claudeState);
+    const ourState = this.oauthService.createPendingState(
+      claudeRedirectUri,
+      claudeState,
+    );
 
     const target = new URL(b2bLoginUrl);
     target.searchParams.set('redirect_uri', callbackUri);
@@ -109,10 +114,13 @@ export class OAuthController {
       this.oauthService.consumePendingState(ourState);
 
     // 2. Verifica o code HMAC-SHA256 localmente (sem chamada ao B2B)
-    const publicUrl   = this.config.getOrThrow<string>('PUBLIC_URL');
+    const publicUrl = this.config.getOrThrow<string>('PUBLIC_URL');
     const callbackUri = `${publicUrl}/oauth/callback`;
 
-    const colaboradorId = this.oauthService.verifyOAuthCode(b2bCode, callbackUri);
+    const colaboradorId = this.oauthService.verifyOAuthCode(
+      b2bCode,
+      callbackUri,
+    );
 
     // 3. Gera nosso próprio auth code (single-use, 5 min)
     const ourCode = await this.oauthService.generateAuthCode(colaboradorId);
@@ -141,7 +149,10 @@ export class OAuthController {
 
     if (grant_type !== 'authorization_code') {
       console.log('[TOKEN] ERRO: grant_type inválido:', grant_type);
-      throw new HttpException({ error: 'unsupported_grant_type' }, HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        { error: 'unsupported_grant_type' },
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     if (!code) {
@@ -167,33 +178,49 @@ export class OAuthController {
     let colab;
     try {
       colab = await this.colaborador.getColaboradorScopes(colaboradorId);
-      console.log('[TOKEN] colaborador encontrado:', colab.email, '| profiles:', colab.profiles);
+      console.log(
+        '[TOKEN] colaborador encontrado:',
+        colab.email,
+        '| profiles:',
+        colab.profiles,
+      );
     } catch (err) {
       console.log('[TOKEN] ERRO ao buscar colaborador:', err);
       throw new HttpException(
-        { error: 'invalid_grant', error_description: 'Colaborador não encontrado' },
+        {
+          error: 'invalid_grant',
+          error_description: 'Colaborador não encontrado',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
 
-    // 3. Emite JWT RS256 (com claim scope) e refresh_token opaco
+    // 3. Resolve as concessões ferramenta:escopo dos perfis e emite JWT RS256
+    //    (com claim scope) e refresh_token opaco
     console.log('[TOKEN] gerando JWT...');
     let jti: string, accessToken: string, expiresAt: Date, expiresIn: number;
     try {
-      ({ jti, token: accessToken, expiresAt, expiresIn } =
-        await this.oauthService.generateToken(colab));
+      const grants = await this.scopeService.resolveGrants(colab.profiles);
+      ({
+        jti,
+        token: accessToken,
+        expiresAt,
+        expiresIn,
+      } = await this.oauthService.generateToken(colab, grants));
       console.log('[TOKEN] JWT gerado, jti:', jti, '| expiresIn:', expiresIn);
     } catch (err) {
       console.log('[TOKEN] ERRO ao gerar JWT:', err);
       throw err;
     }
 
-    const refreshToken      = this.oauthService.issueRefreshToken();
-    const refreshExpiresAt  = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const refreshToken = this.oauthService.issueRefreshToken();
+    const refreshExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     // 4. Persiste tokens e registra o acesso
     const ip =
-      (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ??
+      (req.headers['x-forwarded-for'] as string | undefined)
+        ?.split(',')[0]
+        ?.trim() ??
       req.ip ??
       null;
 
@@ -218,12 +245,19 @@ export class OAuthController {
     }
 
     const response = {
-      access_token:  accessToken,
+      access_token: accessToken,
       refresh_token: refreshToken,
-      token_type:    'Bearer',
-      expires_in:    expiresIn,
+      token_type: 'Bearer',
+      expires_in: expiresIn,
     };
-    console.log('[TOKEN] resposta final:', JSON.stringify({ ...response, access_token: '[JWT]', refresh_token: '[OPAQUE]' }));
+    console.log(
+      '[TOKEN] resposta final:',
+      JSON.stringify({
+        ...response,
+        access_token: '[JWT]',
+        refresh_token: '[OPAQUE]',
+      }),
+    );
     return response;
   }
 
@@ -237,24 +271,33 @@ export class OAuthController {
     const { grant_type, refresh_token } = body;
 
     if (grant_type !== 'refresh_token') {
-      throw new HttpException({ error: 'unsupported_grant_type' }, HttpStatus.BAD_REQUEST);
-    }
-
-    if (!refresh_token) {
       throw new HttpException(
-        { error: 'invalid_request', error_description: 'Missing refresh_token' },
+        { error: 'unsupported_grant_type' },
         HttpStatus.BAD_REQUEST,
       );
     }
 
-    const { colaboradorId, userSessionId, profiles: storedProfiles } =
-      await this.oauthService.validateAndRotateRefreshToken(refresh_token);
+    if (!refresh_token) {
+      throw new HttpException(
+        {
+          error: 'invalid_request',
+          error_description: 'Missing refresh_token',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const {
+      colaboradorId,
+      userSessionId,
+      profiles: storedProfiles,
+    } = await this.oauthService.validateAndRotateRefreshToken(refresh_token);
 
     // Tenta buscar dados atualizados do banco; fallback para os perfis armazenados no token
     let colab = {
-      id:       colaboradorId,
-      email:    '',
-      nome:     '',
+      id: colaboradorId,
+      email: '',
+      nome: '',
       profiles: storedProfiles.split(' ').filter(Boolean),
     };
     try {
@@ -264,26 +307,31 @@ export class OAuthController {
       // mantém os dados armazenados
     }
 
-    const { jti, token: accessToken, expiresAt, expiresIn } =
-      await this.oauthService.generateToken(colab);
-    const newRefreshToken     = this.oauthService.issueRefreshToken();
+    const grants = await this.scopeService.resolveGrants(colab.profiles);
+    const {
+      jti,
+      token: accessToken,
+      expiresAt,
+      expiresIn,
+    } = await this.oauthService.generateToken(colab, grants);
+    const newRefreshToken = this.oauthService.issueRefreshToken();
     const newRefreshExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     await this.oauthService.persistTokens({
       colaboradorId: colab.id,
       userSessionId,
-      accessJti:        jti,
-      refreshToken:     newRefreshToken,
-      profiles:         colab.profiles.join(' '),
+      accessJti: jti,
+      refreshToken: newRefreshToken,
+      profiles: colab.profiles.join(' '),
       expiresAt,
       refreshExpiresAt: newRefreshExpiresAt,
     });
 
     return {
-      access_token:  accessToken,
+      access_token: accessToken,
       refresh_token: newRefreshToken,
-      token_type:    'Bearer',
-      expires_in:    expiresIn,
+      token_type: 'Bearer',
+      expires_in: expiresIn,
     };
   }
 }

@@ -41,7 +41,9 @@ export class ColaboradorService {
 
     const row = rows[0];
     if (!row) {
-      throw new Error(`Colaborador ${colaboradorId} não encontrado em cadastro_colaborador`);
+      throw new Error(
+        `Colaborador ${colaboradorId} não encontrado em cadastro_colaborador`,
+      );
     }
 
     let profiles: string[] = [];

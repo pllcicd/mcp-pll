@@ -19,7 +19,10 @@ interface UserRow extends RowDataPacket {
 export class UserService {
   constructor(@Inject(DB_POOL) private readonly pool: Pool) {}
 
-  async validateUser(username: string, password: string): Promise<AuthUser | null> {
+  async validateUser(
+    username: string,
+    password: string,
+  ): Promise<AuthUser | null> {
     const [rows] = await this.pool.execute<UserRow[]>(
       'SELECT id, email, password_hash, active FROM users WHERE email = ? LIMIT 1',
       [username],

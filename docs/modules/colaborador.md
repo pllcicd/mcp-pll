@@ -2,7 +2,7 @@
 
 **Localização:** `src/colaborador/`
 
-Responsável por buscar dados de colaboradores do Grupo PLL no banco `grupopll_master`. Usado principalmente durante a renovação de tokens para atualizar escopos.
+Responsável por buscar dados de colaboradores do Grupo PLL no banco `grupopll_master`. Usado na emissão e na renovação de tokens para resolver os perfis do usuário.
 
 ---
 
@@ -16,36 +16,50 @@ Importa `DatabaseModule` e exporta `ColaboradorService` para uso em outros módu
 
 ### `colaborador.service.ts` — `ColaboradorService`
 
-#### `getColaborador(id: number)`
+#### `getColaboradorScopes(colaboradorId: number): Promise<ColaboradorInfo>`
 
 Busca um colaborador pelo ID na tabela `grupopll_master.cadastro_colaborador`.
 
 **Query:**
 ```sql
-SELECT id, email, nome, modulos
-FROM grupopll_master.cadastro_colaborador
-WHERE id = ?
-LIMIT 1
+SELECT id, email, nome, acesso_perfil
+  FROM grupopll_master.cadastro_colaborador
+ WHERE id = ?
+ LIMIT 1
 ```
 
-**Retorno:**
+**Retorno (`ColaboradorInfo`):**
 ```typescript
 {
   id: number,
   email: string,
   nome: string,
-  scopes: string[],   // campo `modulos` (CSV) convertido para array
+  profiles: string[],   // chaves com valor true em acesso_perfil
 }
 ```
 
-O campo `modulos` é armazenado como string separada por vírgulas no banco (ex: `"crm,financeiro,rh"`) e convertido para `["crm", "financeiro", "rh"]`.
+O campo `acesso_perfil` é um JSON no banco (ex.: `{"ADMIN": true, "CONVIDADO": false}`).
+Apenas as chaves com valor `true` entram em `profiles`. Cada chave é um código de
+perfil (mesmo valor de `grupopll_master.cadastro_colaborador_perfil.codigo`).
+JSON malformado resulta em `profiles = []` (silencioso).
 
-Lança `Error('Colaborador não encontrado')` se o ID não existir.
+Lança `Error` se o colaborador não existir.
 
 ---
 
-## Uso no Fluxo OAuth
+## Uso no Fluxo OAuth e no RBAC de ferramentas
 
-Durante a renovação de tokens (`POST /oauth/refresh`), os escopos do colaborador podem ser re-consultados para garantir que permissões revogadas no ERP não persistam em tokens novos.
+`getColaboradorScopes` é chamado em dois pontos de `OAuthController`
+(`src/oauth/oauth.controller.ts`): na emissão inicial (`POST /oauth/token`) e na
+renovação (`POST /oauth/refresh` — com fallback para os perfis armazenados no
+`refresh_token` caso a consulta falhe).
 
-> **Nota:** A integração completa de `getColaborador` na geração do token inicial está preparada mas comentada em `oauth.controller.ts`. Atualmente os escopos são derivados do próprio payload do pll-erp.
+Os `profiles` retornados aqui **não** são mais embutidos diretamente no JWT. Eles
+alimentam `ScopeService.resolveGrants(profiles)` (`src/scope/scope.service.ts`), que
+resolve as concessões ferramenta+escopo (`LEITURA`/`USO`) definidas nas tabelas RBAC
+(`mcp_perfis_escopo` etc.) — ver [modules/mcp.md](mcp.md#rbac-de-ferramentas-escopos-leitura--uso).
+O JWT carrega dois claims: `profiles` (perfis crus, para exibição/admin) e `scope`
+(concessões resolvidas `"<ferramenta>:<ESCOPO>"`, usadas por `authorize`/`hasScope`).
+
+Isso garante que perfis revogados no ERP deixem de conceder acesso já na próxima
+renovação de token, sem exigir novo login completo.

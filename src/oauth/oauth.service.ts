@@ -1,4 +1,10 @@
-import { HttpException, HttpStatus, Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SignJWT } from 'jose';
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
@@ -6,6 +12,7 @@ import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { DB_POOL } from '../database/database.module';
 import { KeysService } from '../auth/keys.service';
 import type { ColaboradorInfo } from '../colaborador/colaborador.service';
+import type { ToolGrant } from '../tools/types';
 
 // ── Tipos internos ──────────────────────────────────────────────────────────
 
@@ -21,14 +28,14 @@ interface TokenRow extends RowDataPacket {
   scopes: string; // coluna no banco — mapeada para `profiles` no retorno
 }
 
-const STATE_TTL_MS     = 5 * 60 * 1000; // 5 min — tempo para o usuário fazer login no B2B
+const STATE_TTL_MS = 5 * 60 * 1000; // 5 min — tempo para o usuário fazer login no B2B
 const AUTH_CODE_TTL_MS = 5 * 60 * 1000; // 5 min — tempo para o Claude trocar o code
 
 // ── Payload enviado pelo pll-erp dentro do HMAC code ───────────────────────
 
 interface OAuthCodePayload {
   colaboradorId: number;
-  exp: number;         // Unix timestamp em segundos
+  exp: number; // Unix timestamp em segundos
   redirectUri: string; // deve bater com o redirect_uri que enviamos ao B2B
 }
 
@@ -53,12 +60,12 @@ export class OAuthService implements OnModuleInit {
     const publicUrl = this.config.getOrThrow<string>('PUBLIC_URL');
     return {
       issuer: publicUrl,
-      authorization_endpoint:  `${publicUrl}/oauth/authorize`,
-      token_endpoint:          `${publicUrl}/oauth/token`,
-      registration_endpoint:   `${publicUrl}/oauth/register`,
-      jwks_uri:                `${publicUrl}/.well-known/jwks.json`,
+      authorization_endpoint: `${publicUrl}/oauth/authorize`,
+      token_endpoint: `${publicUrl}/oauth/token`,
+      registration_endpoint: `${publicUrl}/oauth/register`,
+      jwks_uri: `${publicUrl}/.well-known/jwks.json`,
       response_types_supported: ['code'],
-      grant_types_supported:   ['authorization_code', 'refresh_token'],
+      grant_types_supported: ['authorization_code', 'refresh_token'],
     };
   }
 
@@ -76,18 +83,27 @@ export class OAuthService implements OnModuleInit {
   }
 
   /** Valida e consome o ourState, retornando os dados do Claude originais. */
-  consumePendingState(ourState: string): { claudeRedirectUri: string; claudeState: string } {
+  consumePendingState(ourState: string): {
+    claudeRedirectUri: string;
+    claudeState: string;
+  } {
     const entry = this.pendingStates.get(ourState);
     this.pendingStates.delete(ourState);
 
     if (!entry || Date.now() > entry.expiresAt) {
       throw new HttpException(
-        { error: 'invalid_request', error_description: 'State inválido ou expirado' },
+        {
+          error: 'invalid_request',
+          error_description: 'State inválido ou expirado',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
 
-    return { claudeRedirectUri: entry.claudeRedirectUri, claudeState: entry.claudeState };
+    return {
+      claudeRedirectUri: entry.claudeRedirectUri,
+      claudeState: entry.claudeState,
+    };
   }
 
   // ─── HMAC code verification (recebido do B2B) ─────────────────────────────
@@ -101,25 +117,34 @@ export class OAuthService implements OnModuleInit {
     const dotIndex = code.lastIndexOf('.');
     if (dotIndex === -1) {
       throw new HttpException(
-        { error: 'invalid_grant', error_description: 'Formato de code inválido' },
+        {
+          error: 'invalid_grant',
+          error_description: 'Formato de code inválido',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
 
     const payloadPart = code.slice(0, dotIndex);
-    const sigPart     = code.slice(dotIndex + 1);
+    const sigPart = code.slice(dotIndex + 1);
 
     // 1. Verifica assinatura com timing-safe compare
-    const expected    = createHmac('sha256', this.oauthSecret).update(payloadPart).digest('hex');
+    const expected = createHmac('sha256', this.oauthSecret)
+      .update(payloadPart)
+      .digest('hex');
     const expectedBuf = Buffer.from(expected);
-    const sigBuf      = Buffer.from(sigPart);
+    const sigBuf = Buffer.from(sigPart);
 
     const sigOk =
-      sigBuf.length === expectedBuf.length && timingSafeEqual(sigBuf, expectedBuf);
+      sigBuf.length === expectedBuf.length &&
+      timingSafeEqual(sigBuf, expectedBuf);
 
     if (!sigOk) {
       throw new HttpException(
-        { error: 'invalid_grant', error_description: 'Assinatura do code inválida' },
+        {
+          error: 'invalid_grant',
+          error_description: 'Assinatura do code inválida',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -130,7 +155,10 @@ export class OAuthService implements OnModuleInit {
       data = JSON.parse(Buffer.from(payloadPart, 'base64').toString('utf8'));
     } catch {
       throw new HttpException(
-        { error: 'invalid_grant', error_description: 'Payload do code inválido' },
+        {
+          error: 'invalid_grant',
+          error_description: 'Payload do code inválido',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -146,7 +174,10 @@ export class OAuthService implements OnModuleInit {
     // 4. Valida audience (redirectUri assinado deve bater com o que enviamos ao B2B)
     if (data.redirectUri !== callbackUri) {
       throw new HttpException(
-        { error: 'invalid_grant', error_description: 'redirect_uri não corresponde' },
+        {
+          error: 'invalid_grant',
+          error_description: 'redirect_uri não corresponde',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -167,7 +198,9 @@ export class OAuthService implements OnModuleInit {
   }
 
   async consumeAuthCode(code: string): Promise<number> {
-    const [rows] = await this.pool.execute<(RowDataPacket & { colaborador_id: number })[]>(
+    const [rows] = await this.pool.execute<
+      (RowDataPacket & { colaborador_id: number })[]
+    >(
       `SELECT colaborador_id FROM oauth_auth_codes
         WHERE code = ? AND used = 0 AND expires_at > NOW()
         LIMIT 1`,
@@ -177,7 +210,10 @@ export class OAuthService implements OnModuleInit {
     const row = rows[0];
     if (!row) {
       throw new HttpException(
-        { error: 'invalid_grant', error_description: 'Authorization code inválido ou expirado' },
+        {
+          error: 'invalid_grant',
+          error_description: 'Authorization code inválido ou expirado',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -194,16 +230,25 @@ export class OAuthService implements OnModuleInit {
 
   async generateToken(
     colab: ColaboradorInfo,
-  ): Promise<{ jti: string; token: string; expiresAt: Date; expiresIn: number }> {
-    const publicUrl  = this.config.getOrThrow<string>('PUBLIC_URL');
-    const expiresIn  = parseInt(this.config.get('JWT_EXPIRES_IN') ?? '3600', 10);
-    const jti        = randomBytes(16).toString('hex');
-    const expiresAt  = new Date(Date.now() + expiresIn * 1000);
+    grants: ToolGrant[],
+  ): Promise<{
+    jti: string;
+    token: string;
+    expiresAt: Date;
+    expiresIn: number;
+  }> {
+    const publicUrl = this.config.getOrThrow<string>('PUBLIC_URL');
+    const expiresIn = parseInt(this.config.get('JWT_EXPIRES_IN') ?? '3600', 10);
+    const jti = randomBytes(16).toString('hex');
+    const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
     const token = await new SignJWT({
       email: colab.email,
-      nome:  colab.nome,
-      scope: colab.profiles.join(' '),
+      nome: colab.nome,
+      // claim `scope`: concessões ferramenta:ESCOPO resolvidas via mcp_perfis_escopo
+      // (ex.: "whoami:USO get_os:LEITURA"). Distinto do claim `profiles` (perfis crus).
+      scope: grants.map((g) => `${g.ferramenta}:${g.escopo}`).join(' '),
+      profiles: colab.profiles.join(' '),
     })
       .setProtectedHeader({ alg: 'RS256', kid: 'default' })
       .setJti(jti)
@@ -223,6 +268,12 @@ export class OAuthService implements OnModuleInit {
 
   // ─── Persistence ──────────────────────────────────────────────────────────
 
+  /**
+   * `data.profiles` grava a coluna `oauth_tokens.scopes` — que armazena os
+   * PERFIS crus (não os grants ferramenta:escopo do claim `scope` do JWT).
+   * Isso preserva o fallback de identidade usado em `validateAndRotateRefreshToken`
+   * e mantém o orçamento de VARCHAR(1024) da coluna.
+   */
   async persistTokens(data: {
     colaboradorId: number;
     userSessionId: string;
@@ -261,9 +312,11 @@ export class OAuthService implements OnModuleInit {
 
   // ─── Refresh token ────────────────────────────────────────────────────────
 
-  async validateAndRotateRefreshToken(
-    oldRefreshToken: string,
-  ): Promise<{ colaboradorId: number; userSessionId: string; profiles: string }> {
+  async validateAndRotateRefreshToken(oldRefreshToken: string): Promise<{
+    colaboradorId: number;
+    userSessionId: string;
+    profiles: string;
+  }> {
     const [rows] = await this.pool.execute<TokenRow[]>(
       `SELECT colaborador_id, user_session_id, scopes
          FROM oauth_tokens
@@ -277,7 +330,10 @@ export class OAuthService implements OnModuleInit {
     const row = rows[0];
     if (!row) {
       throw new HttpException(
-        { error: 'invalid_grant', error_description: 'Refresh token inválido ou expirado' },
+        {
+          error: 'invalid_grant',
+          error_description: 'Refresh token inválido ou expirado',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -290,7 +346,7 @@ export class OAuthService implements OnModuleInit {
     return {
       colaboradorId: row.colaborador_id,
       userSessionId: row.user_session_id,
-      profiles:      row.scopes,
+      profiles: row.scopes,
     };
   }
 }

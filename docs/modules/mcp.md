@@ -18,32 +18,72 @@ Importa `AuthModule` e `DatabaseModule`. Registra `McpService` e `McpController`
 
 Responsável por criar instâncias do servidor MCP, registrar ferramentas e controlar acesso por escopo.
 
-#### Mapeamento de Escopos
+#### RBAC de ferramentas: escopos LEITURA / USO
 
-```typescript
-const TOOL_SCOPES: Record<string, string[]> = {
-  whoami: [],
-  get_os: [],
-  get_service_title: [],
-  get_status_title: [],
-};
+O controle de acesso não é mais um mapa estático em código — é dirigido pelo banco de
+dados, com dois escopos por ferramenta:
+
+- **`USO`** — permissão para executar a ferramenta.
+- **`LEITURA`** — permissão para ver o código-fonte da ferramenta (via `read_tool_source`).
+
+**Modelo de dados (RBAC por perfil):**
+
+```
+mcp_ferramentas          — registro de ferramentas (nome, arquivo_fonte)
+mcp_escopos              — catálogo de escopos (LEITURA, USO)
+mcp_ferramentas_escopo   — quais escopos cada ferramenta expõe
+mcp_perfis_escopo        — concessão: perfil_codigo → ferramenta+escopo
 ```
 
-Atualmente todas as ferramentas são públicas (sem escopo obrigatório). A estrutura está preparada para adicionar escopos conforme necessário.
+Um colaborador tem N perfis (chaves com valor `true` em
+`grupopll_master.cadastro_colaborador.acesso_perfil`). Cada perfil tem N concessões em
+`mcp_perfis_escopo`. Todas as quatro tabelas têm as colunas `adicionado`, `cancelado`
+(soft-delete) e `fk_colaborador` (quem fez a última alteração), e uma tabela `_log`
+gêmea alimentada por triggers `AFTER INSERT`/`BEFORE UPDATE` para versionamento — ver
+[schema.sql](../../schema.sql).
+
+**Resolução no momento do token:** `ScopeService.resolveGrants(perfis)`
+(`src/scope/scope.service.ts`) faz o JOIN das quatro tabelas e retorna a lista de
+concessões `{ ferramenta, escopo }`, chamada uma única vez em `/oauth/token` e
+`/oauth/refresh` (`OAuthController`). O resultado é embutido no claim `scope` do JWT
+como pares `"<ferramenta>:<ESCOPO>"` separados por espaço (ex.:
+`"whoami:USO get_os:LEITURA get_os:USO"`) — distinto do claim `profiles` (perfis crus).
+Ver [modules/oauth.md](oauth.md) e [modules/colaborador.md](colaborador.md).
+
+**Bootstrap:** o perfil `ADMIN` recebe `LEITURA`+`USO` em todas as ferramentas via seed
+em `schema.sql`, resolvendo o problema de quem administra o próprio RBAC (as ferramentas
+`admin_*` também são gate-adas por `USO`, como qualquer outra).
 
 #### `createServer(user)`
 
 Cria e retorna uma nova instância de `McpServer` configurada para o usuário autenticado.
+As concessões do JWT (`user.grants`) são carregadas em um `Set` em memória — nenhuma
+consulta ao banco por chamada de tool.
 
-Registra todas as ferramentas disponíveis (ver seção [Ferramentas](#ferramentas)). Cada ferramenta verifica escopos antes de executar via `checkScope`.
+Ferramentas registradas via `server.tool(...)` passam por um `Proxy` que as desabilita
+(`RegisteredTool.disable()`) imediatamente se o usuário não tiver `USO`: elas somem do
+`tools/list` e o SDK rejeita qualquer chamada direta.
 
-#### `checkScope(user, toolName)`
+#### `authorize(toolName)` (closure em `ToolContext`)
 
-Verifica se o usuário possui os escopos necessários para executar a ferramenta.
+Verificação em memória (sem hit ao banco) se `user.grants` contém `<toolName>:USO`.
+Nega em português caso contrário. Registrada como primeira chamada em todo handler de
+ferramenta (convenção mantida — ver [adicionar-ferramenta.md](../adicionar-ferramenta.md)).
 
-- Busca os escopos exigidos em `TOOL_SCOPES`.
-- Compara com `user.scopes` (array extraído do JWT).
-- Lança erro se algum escopo obrigatório estiver ausente.
+#### `hasScope(ferramenta, escopo)` (closure em `ToolContext`)
+
+Mesmo lookup em memória, mas para qualquer par ferramenta+escopo — usado por
+`read_tool_source` para checar `LEITURA` da ferramenta **alvo** (não da própria tool
+leitora).
+
+#### Ferramentas de administração (`src/tools/admin.tool.ts`)
+
+`admin_register_tool`, `admin_link_tool_scope`, `admin_grant_perfil_scope`,
+`admin_revoke_perfil_scope` e `admin_list_grants` gerenciam as quatro tabelas RBAC via
+ferramentas MCP (não há endpoint REST). Toda escrita grava `fk_colaborador = user.userId`,
+alimentando os triggers de versionamento. Revogar é soft-delete (`cancelado = NOW()`);
+re-conceder algo revogado é um "undelete" (`UPDATE ... SET cancelado = NULL`), não um
+novo `INSERT`, por causa da unique key em `mcp_perfis_escopo`.
 
 #### `logExecution(colaboradorId, toolName)`
 
@@ -60,12 +100,23 @@ VALUES (?, ?, NOW())
 
 Ver documentação individual em [`docs/tools/`](../tools/).
 
-| Ferramenta | Arquivo |
-|---|---|
-| `whoami` | [tools/whoami.md](../tools/whoami.md) |
-| `get_os` | [tools/get_os.md](../tools/get_os.md) |
-| `get_service_title` | [tools/get_service_title.md](../tools/get_service_title.md) |
-| `get_status_title` | [tools/get_status_title.md](../tools/get_status_title.md) |
+| Ferramenta | Arquivo fonte | Documentação |
+|---|---|---|
+| `whoami` | `src/tools/whoami.tool.ts` | [tools/whoami.md](../tools/whoami.md) |
+| `get_os` | `src/tools/os.tool.ts` | [tools/get_os.md](../tools/get_os.md) |
+| `get_service_title` | `src/tools/os.tool.ts` | [tools/get_service_title.md](../tools/get_service_title.md) |
+| `get_status_title` | `src/tools/os.tool.ts` | [tools/get_status_title.md](../tools/get_status_title.md) |
+| `cmv_parts_rupture_analysis` | `src/tools/cmv.tool.ts` | [tools/cmv_parts_rupture_analysis.md](../tools/cmv_parts_rupture_analysis.md) |
+| `cmv_parts_consumption_physical_match` | `src/tools/cmv.tool.ts` | [tools/cmv_parts_consumption_physical_match.md](../tools/cmv_parts_consumption_physical_match.md) |
+| `cmv_parts_consumption_systemic_match` | `src/tools/cmv.tool.ts` | [tools/cmv_parts_consumption_systemic_match.md](../tools/cmv_parts_consumption_systemic_match.md) |
+| `cmv_parts_consumption_awaiting_match` | `src/tools/cmv.tool.ts` | [tools/cmv_parts_consumption_awaiting_match.md](../tools/cmv_parts_consumption_awaiting_match.md) |
+| `cmv_parts_operational_loss` | `src/tools/cmv.tool.ts` | [tools/cmv_parts_operational_loss.md](../tools/cmv_parts_operational_loss.md) |
+| `read_tool_source` | `src/tools/read-source.tool.ts` | [tools/read_tool_source.md](../tools/read_tool_source.md) |
+| `admin_register_tool` | `src/tools/admin.tool.ts` | [tools/admin_register_tool.md](../tools/admin_register_tool.md) |
+| `admin_link_tool_scope` | `src/tools/admin.tool.ts` | [tools/admin_link_tool_scope.md](../tools/admin_link_tool_scope.md) |
+| `admin_grant_perfil_scope` | `src/tools/admin.tool.ts` | [tools/admin_grant_perfil_scope.md](../tools/admin_grant_perfil_scope.md) |
+| `admin_revoke_perfil_scope` | `src/tools/admin.tool.ts` | [tools/admin_revoke_perfil_scope.md](../tools/admin_revoke_perfil_scope.md) |
+| `admin_list_grants` | `src/tools/admin.tool.ts` | [tools/admin_list_grants.md](../tools/admin_list_grants.md) |
 
 ---
 

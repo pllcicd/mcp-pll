@@ -46,16 +46,22 @@ Estratégia Passport que valida JWTs em requisições protegidas.
 
 **`validate(payload)`**
 
-Chamado após a assinatura ser verificada com sucesso. Retorna o objeto de usuário que será injetado no `request.user`:
+Chamado após a assinatura ser verificada com sucesso. Retorna o `McpUser`
+(`src/tools/types.ts`) que será injetado no `request.user`:
 
 ```typescript
 {
   userId: payload.sub,
   email: payload.email,
   nome: payload.nome,
-  scopes: string[],   // parsado de payload.scope (string separada por espaços)
+  profiles: string[],           // claim `profiles` — perfis crus (chaves true de acesso_perfil)
+  grants: { ferramenta, escopo }[], // claim `scope` — concessões "<ferramenta>:<ESCOPO>" já resolvidas
 }
 ```
+
+`profiles` e `grants` vêm de dois claims JWT distintos — ver
+[modules/mcp.md](mcp.md#rbac-de-ferramentas-escopos-leitura--uso) e
+[modules/scope.md](scope.md) para como `grants` é resolvido e consumido.
 
 ---
 
