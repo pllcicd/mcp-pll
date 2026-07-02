@@ -20,9 +20,17 @@ Access Token clássico com escopo `repo`, ou fine-grained com acesso a "All
 repositories" da organização e permissão "Issues: write"). Sem ela, a ferramenta
 retorna erro sem tentar a chamada HTTP.
 
-O corpo da issue recebe automaticamente um rodapé com o autor real da chamada
-(`user.nome`, `user.email` e `user.profiles` do JWT autenticado) — não depende do
-texto que o modelo escreveu, então sempre reflete quem de fato acionou a ferramenta.
+O corpo da issue recebe automaticamente, ao final, um comentário HTML invisível na
+renderização do GitHub contendo o autor real da chamada em JSON — não depende do
+texto que o modelo escreveu, então sempre reflete quem de fato acionou a ferramenta:
+
+```html
+<!-- mcp-pll:autor {"colaborador_id":123,"nome":"Nicolas Akira Morimoto","email":"akira.morimoto@b2bpll.com.br","perfis":["DEVS","PTCKT","PTCLI"]} -->
+```
+
+Pensado para automação de pós-processamento (ex.: um webhook do GitHub que lê o
+`body` da issue via API, extrai esse JSON com uma regex e dispara notificação para
+os colaboradores dos perfis listados).
 
 ---
 
@@ -69,7 +77,7 @@ Ao usar esta ferramenta para sugerir uma nova ferramenta MCP, o `corpo` deve con
 ```
 POST https://api.github.com/repos/{owner}/{repo}/issues
 Authorization: Bearer {GITHUB_TOKEN}
-{ "title": "...", "body": "<corpo> + rodapé de autoria", "labels": [...] }
+{ "title": "...", "body": "<corpo> + <!-- mcp-pll:autor {...} -->", "labels": [...] }
 ```
 
 ---

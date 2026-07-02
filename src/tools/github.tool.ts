@@ -45,7 +45,16 @@ export function registerGithubTools({ server, authorize, user }: ToolContext) {
       }
 
       const fullRepo = repo.includes('/') ? repo : `${GITHUB_ORG}/${repo}`;
-      const corpoComAutor = `${corpo}\n\n---\nAberto automaticamente via mcp-pll por **${user.nome}** <${user.email}> — perfis: ${user.profiles.join(', ') || '(nenhum)'}`;
+      const autor = {
+        colaborador_id: user.userId,
+        nome: user.nome,
+        email: user.email,
+        perfis: user.profiles,
+      };
+      // Comentário HTML: invisível na renderização do GitHub, mas presente no body
+      // cru retornado pela API — permite parsear o autor programaticamente (ex.:
+      // para notificar por perfil no pós-desenvolvimento) sem poluir a issue.
+      const corpoComAutor = `${corpo}\n\n<!-- mcp-pll:autor ${JSON.stringify(autor)} -->`;
 
       try {
         const response = await axios.post(
