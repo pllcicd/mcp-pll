@@ -45,7 +45,21 @@ export class McpService implements OnModuleInit {
   }
 
   createServer(user: McpUser) {
-    const server = new McpServer({ name: 'mcp-pll', version: '1.0.0' });
+    const instructions = [
+      'Se o usuário pedir algo que nenhuma ferramenta disponível nesta sessão consegue',
+      'atender (ex.: um dado ou uma ação que não existe em nenhuma tool do tools/list',
+      'atual), não invente a resposta nem finja ter concluído a tarefa: diga',
+      'explicitamente o que faltou. Em seguida, monte e chame a ferramenta',
+      'create_github_issue (repo "mcp-pll" por padrão) sugerindo a nova ferramenta:',
+      'inclua no corpo o colaborador/cliente envolvido, a solicitação original, o que',
+      'foi tentado e a sugestão de ferramenta (nome em snake_case, parâmetros, lógica).',
+      'Confirme com o usuário antes de abrir a issue.',
+    ].join(' ');
+
+    const server = new McpServer(
+      { name: 'mcp-pll', version: '1.0.0' },
+      { instructions },
+    );
 
     // Concessões resolvidas em mcp_perfis_escopo e embutidas no JWT (claim `scope`).
     // Lookup em memória — nenhuma consulta ao banco por chamada de tool.
