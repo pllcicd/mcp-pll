@@ -17,7 +17,7 @@ conversa até aqui, pergunte ao usuário antes de prosseguir:
 - Query SQL ou lógica de negócio
 - Em qual arquivo de `src/tools/` ela deve viver (novo arquivo, ou agrupada em um
   já existente e relacionado, ex.: junto de `os.tool.ts`)
-- Quais perfis devem receber `USO`/`LEITURA` desde já (ex.: `ADMIN`) — ou se a
+- Quais perfis devem receber `USO`/`LEITURA` desde já (ex.: `DEVS`) — ou se a
   concessão fica para depois, feita manualmente
 
 Depois, execute nesta ordem (cada passo depende do anterior — não pule etapas):

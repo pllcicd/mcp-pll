@@ -85,6 +85,7 @@ Todas as ferramentas exigem o escopo **USO** (execução) e, quando aplicável, 
 | `cmv_parts_consumption_awaiting_match` | Relatório CMV: Consumo Aguardando Casamento | [tools/cmv_parts_consumption_awaiting_match.md](tools/cmv_parts_consumption_awaiting_match.md) |
 | `cmv_parts_operational_loss` | Relatório CMV: Perda Operacional | [tools/cmv_parts_operational_loss.md](tools/cmv_parts_operational_loss.md) |
 | `read_tool_source` | Lê o código-fonte `.ts` de outra ferramenta (exige LEITURA do alvo) | [tools/read_tool_source.md](tools/read_tool_source.md) |
+| `view_schema` | Retorna o schema (colunas, tipos, chaves) de qualquer tabela do banco de dados | [tools/view_schema.md](tools/view_schema.md) |
 | `admin_register_tool` | Cadastra/atualiza uma ferramenta no registro RBAC | [tools/admin_register_tool.md](tools/admin_register_tool.md) |
 | `admin_link_tool_scope` | Vincula um escopo a uma ferramenta | [tools/admin_link_tool_scope.md](tools/admin_link_tool_scope.md) |
 | `admin_grant_perfil_scope` | Concede um escopo de ferramenta a um perfil | [tools/admin_grant_perfil_scope.md](tools/admin_grant_perfil_scope.md) |

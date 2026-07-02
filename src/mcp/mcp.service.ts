@@ -13,6 +13,7 @@ import { registerCmvTools } from '../tools/cmv.tool';
 import { registerReadSourceTool } from '../tools/read-source.tool';
 import { registerAdminTools } from '../tools/admin.tool';
 import { registerColaboradorTools } from '../tools/colaborador.tool';
+import { registerSchemaTools } from '../tools/schema.tool';
 
 @Injectable()
 export class McpService implements OnModuleInit {
@@ -114,6 +115,7 @@ export class McpService implements OnModuleInit {
     registerReadSourceTool(ctx);
     registerAdminTools(ctx);
     registerColaboradorTools(ctx);
+    registerSchemaTools(ctx);
 
     return server;
   }

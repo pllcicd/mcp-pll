@@ -50,7 +50,7 @@ como pares `"<ferramenta>:<ESCOPO>"` separados por espaço (ex.:
 `"whoami:USO get_os:LEITURA get_os:USO"`) — distinto do claim `profiles` (perfis crus).
 Ver [modules/oauth.md](oauth.md) e [modules/colaborador.md](colaborador.md).
 
-**Bootstrap:** o perfil `ADMIN` recebe `LEITURA`+`USO` em todas as ferramentas via seed
+**Bootstrap:** o perfil `DEVS` recebe `LEITURA`+`USO` em todas as ferramentas via seed
 em `schema.sql`, resolvendo o problema de quem administra o próprio RBAC (as ferramentas
 `admin_*` também são gate-adas por `USO`, como qualquer outra).
 
@@ -113,6 +113,7 @@ Ver documentação individual em [`docs/tools/`](../tools/).
 | `cmv_parts_consumption_awaiting_match` | `src/tools/cmv.tool.ts` | [tools/cmv_parts_consumption_awaiting_match.md](../tools/cmv_parts_consumption_awaiting_match.md) |
 | `cmv_parts_operational_loss` | `src/tools/cmv.tool.ts` | [tools/cmv_parts_operational_loss.md](../tools/cmv_parts_operational_loss.md) |
 | `read_tool_source` | `src/tools/read-source.tool.ts` | [tools/read_tool_source.md](../tools/read_tool_source.md) |
+| `view_schema` | `src/tools/schema.tool.ts` | [tools/view_schema.md](../tools/view_schema.md) |
 | `admin_register_tool` | `src/tools/admin.tool.ts` | [tools/admin_register_tool.md](../tools/admin_register_tool.md) |
 | `admin_link_tool_scope` | `src/tools/admin.tool.ts` | [tools/admin_link_tool_scope.md](../tools/admin_link_tool_scope.md) |
 | `admin_grant_perfil_scope` | `src/tools/admin.tool.ts` | [tools/admin_grant_perfil_scope.md](../tools/admin_grant_perfil_scope.md) |

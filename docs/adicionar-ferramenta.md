@@ -17,7 +17,7 @@ código, (b) estar cadastrada em `mcp_ferramentas`, (c) ter seus escopos
 (`LEITURA`/`USO`) vinculados em `mcp_ferramentas_escopo`, e (d) ter pelo menos um
 perfil com esse escopo concedido em `mcp_perfis_escopo`. Sem os passos (b)-(d), a
 ferramenta existe no código mas **ninguém** consegue chamá-la nem vê-la no
-`tools/list` — nem o perfil `ADMIN`, a menos que você a inclua no seed de
+`tools/list` — nem o perfil `DEVS`, a menos que você a inclua no seed de
 bootstrap do `schema.sql`.
 
 Os dois escopos possíveis, por ferramenta:
@@ -90,7 +90,7 @@ usuário da sessão.
 Feito **em runtime**, via as próprias ferramentas MCP de administração
 (`src/tools/admin.tool.ts`) — nunca editando as tabelas na mão. Você precisa estar
 autenticado com um perfil que já tenha `USO` nessas ferramentas admin (o perfil
-`ADMIN` tem, via bootstrap).
+`DEVS` tem, via bootstrap).
 
 ```json
 { "name": "admin_register_tool",    "arguments": { "nome": "get_cliente", "arquivo_fonte": "cliente.tool.ts", "descricao": "Retorna os dados de um cliente pelo ID" } }
@@ -116,9 +116,9 @@ autenticado com um perfil que já tenha `USO` nessas ferramentas admin (o perfil
   [tools/admin_revoke_perfil_scope.md](tools/admin_revoke_perfil_scope.md),
   [tools/admin_list_grants.md](tools/admin_list_grants.md).
 
-**Ferramenta que já deve nascer disponível a um perfil (ex.: `ADMIN`) sem exigir
+**Ferramenta que já deve nascer disponível a um perfil (ex.: `DEVS`) sem exigir
 uma chamada manual pós-deploy?** Adicione-a ao bloco de seed em `schema.sql`
-(veja como as 15 ferramentas atuais e o perfil `ADMIN` são semeados lá — é
+(veja como as 15 ferramentas atuais e o perfil `DEVS` são semeados lá — é
 idempotente via `ON DUPLICATE KEY UPDATE`, seguro para reaplicar).
 
 ---
