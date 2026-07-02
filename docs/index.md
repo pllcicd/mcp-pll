@@ -91,6 +91,7 @@ Todas as ferramentas exigem o escopo **USO** (execução) e, quando aplicável, 
 | `admin_grant_perfil_scope` | Concede um escopo de ferramenta a um perfil | [tools/admin_grant_perfil_scope.md](tools/admin_grant_perfil_scope.md) |
 | `admin_revoke_perfil_scope` | Revoga (soft-delete) um escopo de ferramenta de um perfil | [tools/admin_revoke_perfil_scope.md](tools/admin_revoke_perfil_scope.md) |
 | `admin_list_grants` | Lista as concessões RBAC atuais | [tools/admin_list_grants.md](tools/admin_list_grants.md) |
+| `create_github_issue` | Cria uma issue no GitHub (ex.: sugestão de nova ferramenta) | [tools/create_github_issue.md](tools/create_github_issue.md) |
 
 > Como adicionar uma nova ferramenta (padrão de código, cadastro nas tabelas RBAC,
 > concessão de escopo): [adicionar-ferramenta.md](adicionar-ferramenta.md).

@@ -14,6 +14,7 @@ import { registerReadSourceTool } from '../tools/read-source.tool';
 import { registerAdminTools } from '../tools/admin.tool';
 import { registerColaboradorTools } from '../tools/colaborador.tool';
 import { registerSchemaTools } from '../tools/schema.tool';
+import { registerGithubTools } from '../tools/github.tool';
 
 @Injectable()
 export class McpService implements OnModuleInit {
@@ -116,6 +117,7 @@ export class McpService implements OnModuleInit {
     registerAdminTools(ctx);
     registerColaboradorTools(ctx);
     registerSchemaTools(ctx);
+    registerGithubTools(ctx);
 
     return server;
   }
