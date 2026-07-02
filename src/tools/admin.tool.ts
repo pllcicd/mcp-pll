@@ -7,7 +7,7 @@ const escopoParam = z
   .describe('Código do escopo: LEITURA ou USO');
 
 /**
- * Ferramentas de administração do RBAC (mcp_ferramentas / mcp_escopos /
+ * Ferramentas de administração do RBAC (mcp_ferramentas /
  * mcp_ferramentas_escopo / mcp_perfis_escopo). Gate-adas por USO como qualquer
  * outra ferramenta — o perfil ADMIN recebe USO nelas via o seed de bootstrap em
  * schema.sql, o que resolve o ovo-galinha de quem administra o próprio RBAC.
@@ -75,27 +75,23 @@ export function registerAdminTools({
         `SELECT id FROM mcp_ferramentas WHERE nome = ? AND cancelado IS NULL LIMIT 1`,
         [tool_nome],
       );
-      const [escopoRows] = await pool.execute<RowDataPacket[]>(
-        `SELECT id FROM mcp_escopos WHERE codigo = ? AND cancelado IS NULL LIMIT 1`,
-        [escopo_codigo],
-      );
 
-      if (!ferramentaRows[0] || !escopoRows[0]) {
+      if (!ferramentaRows[0]) {
         return {
           content: [
             {
               type: 'text' as const,
-              text: `Ferramenta "${tool_nome}" ou escopo "${escopo_codigo}" não encontrado.`,
+              text: `Ferramenta "${tool_nome}" não encontrada.`,
             },
           ],
         };
       }
 
       await pool.execute(
-        `INSERT INTO mcp_ferramentas_escopo (fk_ferramenta, fk_escopo, fk_colaborador)
+        `INSERT INTO mcp_ferramentas_escopo (fk_ferramenta, escopo, fk_colaborador)
          VALUES (?, ?, ?)
          ON DUPLICATE KEY UPDATE fk_colaborador = VALUES(fk_colaborador), cancelado = NULL`,
-        [ferramentaRows[0].id, escopoRows[0].id, user.userId],
+        [ferramentaRows[0].id, escopo_codigo, user.userId],
       );
 
       return {
@@ -128,8 +124,7 @@ export function registerAdminTools({
         `SELECT fe.id
            FROM mcp_ferramentas_escopo fe
            JOIN mcp_ferramentas f ON f.id = fe.fk_ferramenta AND f.cancelado IS NULL
-           JOIN mcp_escopos e     ON e.id = fe.fk_escopo     AND e.cancelado IS NULL
-          WHERE f.nome = ? AND e.codigo = ? AND fe.cancelado IS NULL
+          WHERE f.nome = ? AND fe.escopo = ? AND fe.cancelado IS NULL
           LIMIT 1`,
         [tool_nome, escopo_codigo],
       );
@@ -182,9 +177,8 @@ export function registerAdminTools({
         `UPDATE mcp_perfis_escopo pe
            JOIN mcp_ferramentas_escopo fe ON fe.id = pe.fk_ferramenta_escopo
            JOIN mcp_ferramentas f         ON f.id  = fe.fk_ferramenta
-           JOIN mcp_escopos e             ON e.id  = fe.fk_escopo
             SET pe.cancelado = NOW(), pe.fk_colaborador = ?
-          WHERE pe.perfil_codigo = ? AND f.nome = ? AND e.codigo = ? AND pe.cancelado IS NULL`,
+          WHERE pe.perfil_codigo = ? AND f.nome = ? AND fe.escopo = ? AND pe.cancelado IS NULL`,
         [user.userId, perfil_codigo, tool_nome, escopo_codigo],
       );
 
@@ -224,14 +218,13 @@ export function registerAdminTools({
       if (deny) return deny;
 
       const [rows] = await pool.execute<RowDataPacket[]>(
-        `SELECT pe.perfil_codigo, f.nome AS ferramenta, e.codigo AS escopo, pe.adicionado
+        `SELECT pe.perfil_codigo, f.nome AS ferramenta, fe.escopo AS escopo, pe.adicionado
            FROM mcp_perfis_escopo pe
            JOIN mcp_ferramentas_escopo fe ON fe.id = pe.fk_ferramenta_escopo
            JOIN mcp_ferramentas f         ON f.id  = fe.fk_ferramenta
-           JOIN mcp_escopos e             ON e.id  = fe.fk_escopo
           WHERE pe.cancelado IS NULL
             ${perfil_codigo ? 'AND pe.perfil_codigo = ?' : ''}
-          ORDER BY pe.perfil_codigo, f.nome, e.codigo`,
+          ORDER BY pe.perfil_codigo, f.nome, fe.escopo`,
         perfil_codigo ? [perfil_codigo] : [],
       );
 

@@ -106,6 +106,7 @@ Ver documentação individual em [`docs/tools/`](../tools/).
 | `get_os` | `src/tools/os.tool.ts` | [tools/get_os.md](../tools/get_os.md) |
 | `get_service_title` | `src/tools/os.tool.ts` | [tools/get_service_title.md](../tools/get_service_title.md) |
 | `get_status_title` | `src/tools/os.tool.ts` | [tools/get_status_title.md](../tools/get_status_title.md) |
+| `list_colaboradores` | `src/tools/colaborador.tool.ts` | [tools/list_colaboradores.md](../tools/list_colaboradores.md) |
 | `cmv_parts_rupture_analysis` | `src/tools/cmv.tool.ts` | [tools/cmv_parts_rupture_analysis.md](../tools/cmv_parts_rupture_analysis.md) |
 | `cmv_parts_consumption_physical_match` | `src/tools/cmv.tool.ts` | [tools/cmv_parts_consumption_physical_match.md](../tools/cmv_parts_consumption_physical_match.md) |
 | `cmv_parts_consumption_systemic_match` | `src/tools/cmv.tool.ts` | [tools/cmv_parts_consumption_systemic_match.md](../tools/cmv_parts_consumption_systemic_match.md) |

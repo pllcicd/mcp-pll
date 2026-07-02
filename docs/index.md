@@ -78,6 +78,7 @@ Todas as ferramentas exigem o escopo **USO** (execução) e, quando aplicável, 
 | `get_os` | Busca uma Ordem de Serviço pelo ID | [tools/get_os.md](tools/get_os.md) |
 | `get_service_title` | Busca o título de um tipo de serviço pelo ID | [tools/get_service_title.md](tools/get_service_title.md) |
 | `get_status_title` | Busca o título de um status de setor pelo ID | [tools/get_status_title.md](tools/get_status_title.md) |
+| `list_colaboradores` | Lista colaboradores e seus perfis de acesso (`acesso_perfil` normalizado em array), com filtro opcional por nome/email | [tools/list_colaboradores.md](tools/list_colaboradores.md) |
 | `cmv_parts_rupture_analysis` | Relatório CMV: Análise de Ruptura de Peças | [tools/cmv_parts_rupture_analysis.md](tools/cmv_parts_rupture_analysis.md) |
 | `cmv_parts_consumption_physical_match` | Relatório CMV: Consumo Casado Fisicamente | [tools/cmv_parts_consumption_physical_match.md](tools/cmv_parts_consumption_physical_match.md) |
 | `cmv_parts_consumption_systemic_match` | Relatório CMV: Consumo Casado Sistemicamente | [tools/cmv_parts_consumption_systemic_match.md](tools/cmv_parts_consumption_systemic_match.md) |

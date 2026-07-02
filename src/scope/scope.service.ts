@@ -23,11 +23,10 @@ export class ScopeService {
 
     const placeholders = perfis.map(() => '?').join(', ');
     const [rows] = await this.pool.query<GrantRow[]>(
-      `SELECT DISTINCT f.nome AS ferramenta, e.codigo AS escopo
+      `SELECT DISTINCT f.nome AS ferramenta, fe.escopo AS escopo
          FROM mcp_perfis_escopo pe
          JOIN mcp_ferramentas_escopo fe ON fe.id = pe.fk_ferramenta_escopo AND fe.cancelado IS NULL
          JOIN mcp_ferramentas f         ON f.id  = fe.fk_ferramenta        AND f.cancelado  IS NULL
-         JOIN mcp_escopos e             ON e.id  = fe.fk_escopo            AND e.cancelado  IS NULL
         WHERE pe.perfil_codigo IN (${placeholders})
           AND pe.cancelado IS NULL`,
       perfis,

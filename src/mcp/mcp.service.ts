@@ -12,6 +12,7 @@ import { registerOsTools } from '../tools/os.tool';
 import { registerCmvTools } from '../tools/cmv.tool';
 import { registerReadSourceTool } from '../tools/read-source.tool';
 import { registerAdminTools } from '../tools/admin.tool';
+import { registerColaboradorTools } from '../tools/colaborador.tool';
 
 @Injectable()
 export class McpService implements OnModuleInit {
@@ -112,6 +113,7 @@ export class McpService implements OnModuleInit {
     registerCmvTools(ctx, this.fetchCmvReport.bind(this));
     registerReadSourceTool(ctx);
     registerAdminTools(ctx);
+    registerColaboradorTools(ctx);
 
     return server;
   }
