@@ -63,6 +63,7 @@ export class OAuthService implements OnModuleInit {
       authorization_endpoint: `${publicUrl}/oauth/authorize`,
       token_endpoint: `${publicUrl}/oauth/token`,
       registration_endpoint: `${publicUrl}/oauth/register`,
+      revocation_endpoint: `${publicUrl}/oauth/revoke`,
       jwks_uri: `${publicUrl}/.well-known/jwks.json`,
       response_types_supported: ['code'],
       grant_types_supported: ['authorization_code', 'refresh_token'],
@@ -198,32 +199,47 @@ export class OAuthService implements OnModuleInit {
   }
 
   async consumeAuthCode(code: string): Promise<number> {
-    const [rows] = await this.pool.execute<
-      (RowDataPacket & { colaborador_id: number })[]
-    >(
-      `SELECT colaborador_id FROM oauth_auth_codes
-        WHERE code = ? AND used = 0 AND expires_at > NOW()
-        LIMIT 1`,
-      [code],
-    );
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
 
-    const row = rows[0];
-    if (!row) {
-      throw new HttpException(
-        {
-          error: 'invalid_grant',
-          error_description: 'Authorization code inválido ou expirado',
-        },
-        HttpStatus.BAD_REQUEST,
+      // SELECT ... FOR UPDATE trava a linha até o commit, evitando que duas
+      // trocas concorrentes do mesmo code (ex.: retry de rede) passem ambas
+      // pelo SELECT antes que o UPDATE marque `used = 1`.
+      const [rows] = await conn.execute<
+        (RowDataPacket & { colaborador_id: number })[]
+      >(
+        `SELECT colaborador_id FROM oauth_auth_codes
+          WHERE code = ? AND used = 0 AND expires_at > NOW()
+          LIMIT 1 FOR UPDATE`,
+        [code],
       );
+
+      const row = rows[0];
+      if (!row) {
+        await conn.rollback();
+        throw new HttpException(
+          {
+            error: 'invalid_grant',
+            error_description: 'Authorization code inválido ou expirado',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      await conn.execute(
+        `UPDATE oauth_auth_codes SET used = 1 WHERE code = ?`,
+        [code],
+      );
+
+      await conn.commit();
+      return row.colaborador_id;
+    } catch (err) {
+      await conn.rollback().catch(() => {});
+      throw err;
+    } finally {
+      conn.release();
     }
-
-    await this.pool.execute(
-      `UPDATE oauth_auth_codes SET used = 1 WHERE code = ?`,
-      [code],
-    );
-
-    return row.colaborador_id;
   }
 
   // ─── Token generation ─────────────────────────────────────────────────────
@@ -317,36 +333,71 @@ export class OAuthService implements OnModuleInit {
     userSessionId: string;
     profiles: string;
   }> {
-    const [rows] = await this.pool.execute<TokenRow[]>(
-      `SELECT colaborador_id, user_session_id, scopes
-         FROM oauth_tokens
-        WHERE refresh_token = ?
-          AND revoked = 0
-          AND refresh_expires_at > NOW()
-        LIMIT 1`,
-      [oldRefreshToken],
-    );
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
 
-    const row = rows[0];
-    if (!row) {
-      throw new HttpException(
-        {
-          error: 'invalid_grant',
-          error_description: 'Refresh token inválido ou expirado',
-        },
-        HttpStatus.BAD_REQUEST,
+      // SELECT ... FOR UPDATE trava a linha até o commit, evitando que dois
+      // /oauth/refresh concorrentes com o mesmo refresh_token (retry do
+      // cliente, reconexão duplicada) rotacionem o mesmo token duas vezes.
+      const [rows] = await conn.execute<TokenRow[]>(
+        `SELECT colaborador_id, user_session_id, scopes
+           FROM oauth_tokens
+          WHERE refresh_token = ?
+            AND revoked = 0
+            AND refresh_expires_at > NOW()
+          LIMIT 1 FOR UPDATE`,
+        [oldRefreshToken],
       );
+
+      const row = rows[0];
+      if (!row) {
+        await conn.rollback();
+        throw new HttpException(
+          {
+            error: 'invalid_grant',
+            error_description: 'Refresh token inválido ou expirado',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      await conn.execute(
+        `UPDATE oauth_tokens SET revoked = 1 WHERE refresh_token = ?`,
+        [oldRefreshToken],
+      );
+
+      await conn.commit();
+      return {
+        colaboradorId: row.colaborador_id,
+        userSessionId: row.user_session_id,
+        profiles: row.scopes,
+      };
+    } catch (err) {
+      await conn.rollback().catch(() => {});
+      throw err;
+    } finally {
+      conn.release();
     }
+  }
 
-    await this.pool.execute(
-      `UPDATE oauth_tokens SET revoked = 1 WHERE refresh_token = ?`,
-      [oldRefreshToken],
+  // ─── Revogação (logout) ───────────────────────────────────────────────────
+
+  /** Revoga a linha correspondente a um access_token (por jti), se existir. */
+  async revokeByAccessJti(jti: string): Promise<boolean> {
+    const [result]: any = await this.pool.execute(
+      `UPDATE oauth_tokens SET revoked = 1 WHERE access_jti = ? AND revoked = 0`,
+      [jti],
     );
+    return result.affectedRows > 0;
+  }
 
-    return {
-      colaboradorId: row.colaborador_id,
-      userSessionId: row.user_session_id,
-      profiles: row.scopes,
-    };
+  /** Revoga a linha correspondente a um refresh_token, se existir. */
+  async revokeByRefreshToken(refreshToken: string): Promise<boolean> {
+    const [result]: any = await this.pool.execute(
+      `UPDATE oauth_tokens SET revoked = 1 WHERE refresh_token = ? AND revoked = 0`,
+      [refreshToken],
+    );
+    return result.affectedRows > 0;
   }
 }

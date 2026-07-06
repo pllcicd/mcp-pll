@@ -11,6 +11,8 @@ export type ToolGrant = {
 
 export type McpUser = {
   userId: string;
+  /** jti do access_token JWT — usado para vincular a sessão MCP ao token e permitir revogação em cascata. */
+  jti?: string;
   email: string;
   nome: string;
   /** Perfis crus (chaves true de acesso_perfil) — usado para exibição e gates de admin. */

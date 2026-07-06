@@ -12,20 +12,22 @@ import { randomUUID } from 'crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { McpService } from './mcp.service';
+import { SessionRegistryService } from './session-registry.service';
 
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class McpController {
-  private readonly sessions = new Map<string, StreamableHTTPServerTransport>();
-
-  constructor(private readonly mcpService: McpService) {}
+  constructor(
+    private readonly mcpService: McpService,
+    private readonly sessionRegistry: SessionRegistryService,
+  ) {}
 
   @Post()
   async handlePost(@Req() req: Request, @Res() res: Response) {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
-    if (sessionId && this.sessions.has(sessionId)) {
-      const transport = this.sessions.get(sessionId)!;
+    if (sessionId && this.sessionRegistry.has(sessionId)) {
+      const transport = this.sessionRegistry.get(sessionId)!;
       await transport.handleRequest(req, res, req.body);
       return;
     }
@@ -36,7 +38,7 @@ export class McpController {
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (id) => {
-        this.sessions.set(id, transport);
+        this.sessionRegistry.register(id, transport, user.userId, user.jti);
       },
     });
 
@@ -48,12 +50,12 @@ export class McpController {
   async handleGet(@Req() req: Request, @Res() res: Response) {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
-    if (!sessionId || !this.sessions.has(sessionId)) {
+    if (!sessionId || !this.sessionRegistry.has(sessionId)) {
       res.status(400).json({ error: 'Invalid or missing session ID' });
       return;
     }
 
-    const transport = this.sessions.get(sessionId)!;
+    const transport = this.sessionRegistry.get(sessionId)!;
     await transport.handleRequest(req, res);
   }
 
@@ -61,13 +63,13 @@ export class McpController {
   async handleDelete(@Req() req: Request, @Res() res: Response) {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
-    if (!sessionId || !this.sessions.has(sessionId)) {
+    if (!sessionId || !this.sessionRegistry.has(sessionId)) {
       res.status(400).json({ error: 'Invalid or missing session ID' });
       return;
     }
 
-    const transport = this.sessions.get(sessionId)!;
+    const transport = this.sessionRegistry.get(sessionId)!;
     await transport.handleRequest(req, res);
-    this.sessions.delete(sessionId);
+    await this.sessionRegistry.remove(sessionId);
   }
 }

@@ -10,11 +10,13 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { randomBytes } from 'crypto';
+import { decodeJwt } from 'jose';
 import { ConfigService } from '@nestjs/config';
 import { OAuthService } from './oauth.service';
 import { ColaboradorService } from '../colaborador/colaborador.service';
 import { KeysService } from '../auth/keys.service';
 import { ScopeService } from '../scope/scope.service';
+import { SessionRegistryService } from '../mcp/session-registry.service';
 
 @Controller()
 export class OAuthController {
@@ -24,6 +26,7 @@ export class OAuthController {
     private readonly keys: KeysService,
     private readonly config: ConfigService,
     private readonly scopeService: ScopeService,
+    private readonly sessionRegistry: SessionRegistryService,
   ) {}
 
   // ─── Discovery / JWKS ─────────────────────────────────────────────────────
@@ -333,5 +336,58 @@ export class OAuthController {
       token_type: 'Bearer',
       expires_in: expiresIn,
     };
+  }
+
+  // ─── Logout / revogação (RFC 7009) ────────────────────────────────────────
+  /**
+   * Revoga um access_token ou refresh_token. Marca `revoked = 1` em
+   * oauth_tokens — a partir daí o JwtStrategy passa a rejeitar o access_token
+   * (checagem por jti) e o /oauth/refresh deixa de aceitar o refresh_token.
+   * Por spec (RFC 7009), sempre responde 200 mesmo se o token já não existir.
+   */
+  @Post('oauth/revoke')
+  async revoke(@Req() req: Request) {
+    const body = req.body as Record<string, string>;
+    const { token, token_type_hint } = body;
+
+    if (!token) {
+      throw new HttpException(
+        { error: 'invalid_request', error_description: 'Missing token' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const tryRefreshFirst = token_type_hint === 'refresh_token';
+
+    const attempts = tryRefreshFirst
+      ? [
+          () => this.oauthService.revokeByRefreshToken(token),
+          () => this.revokeAccessTokenByJwt(token),
+        ]
+      : [
+          () => this.revokeAccessTokenByJwt(token),
+          () => this.oauthService.revokeByRefreshToken(token),
+        ];
+
+    for (const attempt of attempts) {
+      if (await attempt()) break;
+    }
+
+    return {};
+  }
+
+  private async revokeAccessTokenByJwt(token: string): Promise<boolean> {
+    try {
+      const payload = decodeJwt(token);
+      if (!payload.jti) return false;
+      const revoked = await this.oauthService.revokeByAccessJti(payload.jti);
+      // Derruba a sessão MCP já aberta com esse token — sem isso, revogar no
+      // banco só bloquearia a *próxima* requisição, e a conexão em memória
+      // continuaria servindo normalmente até o cliente fechar por conta própria.
+      await this.sessionRegistry.closeSessionsForJti(payload.jti);
+      return revoked;
+    } catch {
+      return false;
+    }
   }
 }
