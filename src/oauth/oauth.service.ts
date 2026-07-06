@@ -3,11 +3,17 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  Logger,
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SignJWT } from 'jose';
-import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from 'crypto';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { DB_POOL } from '../database/database.module';
 import { KeysService } from '../auth/keys.service';
@@ -19,6 +25,9 @@ import type { ToolGrant } from '../tools/types';
 interface PendingState {
   claudeRedirectUri: string;
   claudeState: string;
+  clientId: string;
+  codeChallenge: string;
+  codeChallengeMethod: string;
   expiresAt: number;
 }
 
@@ -26,6 +35,17 @@ interface TokenRow extends RowDataPacket {
   colaborador_id: number;
   user_session_id: string;
   scopes: string; // coluna no banco — mapeada para `profiles` no retorno
+  client_id: string | null;
+  family_id: string | null;
+  revoked: number;
+}
+
+interface AuthCodeRow extends RowDataPacket {
+  colaborador_id: number;
+  client_id: string | null;
+  redirect_uri: string | null;
+  code_challenge: string | null;
+  code_challenge_method: string | null;
 }
 
 const STATE_TTL_MS = 5 * 60 * 1000; // 5 min — tempo para o usuário fazer login no B2B
@@ -41,6 +61,7 @@ interface OAuthCodePayload {
 
 @Injectable()
 export class OAuthService implements OnModuleInit {
+  private readonly logger = new Logger(OAuthService.name);
   private readonly pendingStates = new Map<string, PendingState>();
   private oauthSecret: string;
 
@@ -67,17 +88,80 @@ export class OAuthService implements OnModuleInit {
       jwks_uri: `${publicUrl}/.well-known/jwks.json`,
       response_types_supported: ['code'],
       grant_types_supported: ['authorization_code', 'refresh_token'],
+      code_challenge_methods_supported: ['S256'],
+      token_endpoint_auth_methods_supported: ['none'],
+      revocation_endpoint_auth_methods_supported: ['none'],
+      // Concessões são "ferramenta:ESCOPO" resolvidas dinamicamente por perfil
+      // (ver mcp_perfis_escopo) — só os valores de escopo em si são fixos.
+      scopes_supported: ['LEITURA', 'USO'],
     };
+  }
+
+  // ─── Dynamic Client Registration (RFC 7591) ───────────────────────────────
+
+  /** Registra um client com seus redirect_uris e retorna o client_id gerado. */
+  async registerClient(redirectUris: string[]): Promise<string> {
+    const clientId = randomBytes(16).toString('hex');
+    await this.pool.execute(
+      `INSERT INTO oauth_clients (client_id, redirect_uris) VALUES (?, ?)`,
+      [clientId, JSON.stringify(redirectUris ?? [])],
+    );
+    return clientId;
+  }
+
+  /**
+   * Valida que `redirectUri` está na lista exata registrada para `clientId`.
+   * Sem isso, /oauth/authorize aceitaria qualquer redirect_uri (open redirect).
+   */
+  async validateClientRedirectUri(
+    clientId: string,
+    redirectUri: string,
+  ): Promise<void> {
+    const [rows] = await this.pool.execute<
+      (RowDataPacket & { redirect_uris: string })[]
+    >(`SELECT redirect_uris FROM oauth_clients WHERE client_id = ? LIMIT 1`, [
+      clientId,
+    ]);
+
+    const row = rows[0];
+    if (!row) {
+      throw new HttpException(
+        { error: 'invalid_client', error_description: 'client_id desconhecido' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    let registered: string[];
+    try {
+      registered = JSON.parse(row.redirect_uris);
+    } catch {
+      registered = [];
+    }
+
+    if (!registered.includes(redirectUri)) {
+      throw new HttpException(
+        {
+          error: 'invalid_request',
+          error_description: 'redirect_uri não registrado para este client_id',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
   }
 
   // ─── Pending OAuth state (authorize → callback) ───────────────────────────
 
   /** Salva estado pendente e retorna o ourState gerado. */
-  createPendingState(claudeRedirectUri: string, claudeState: string): string {
+  createPendingState(data: {
+    claudeRedirectUri: string;
+    claudeState: string;
+    clientId: string;
+    codeChallenge: string;
+    codeChallengeMethod: string;
+  }): string {
     const ourState = randomBytes(16).toString('hex');
     this.pendingStates.set(ourState, {
-      claudeRedirectUri,
-      claudeState,
+      ...data,
       expiresAt: Date.now() + STATE_TTL_MS,
     });
     return ourState;
@@ -87,6 +171,9 @@ export class OAuthService implements OnModuleInit {
   consumePendingState(ourState: string): {
     claudeRedirectUri: string;
     claudeState: string;
+    clientId: string;
+    codeChallenge: string;
+    codeChallengeMethod: string;
   } {
     const entry = this.pendingStates.get(ourState);
     this.pendingStates.delete(ourState);
@@ -101,10 +188,7 @@ export class OAuthService implements OnModuleInit {
       );
     }
 
-    return {
-      claudeRedirectUri: entry.claudeRedirectUri,
-      claudeState: entry.claudeState,
-    };
+    return entry;
   }
 
   // ─── HMAC code verification (recebido do B2B) ─────────────────────────────
@@ -188,17 +272,45 @@ export class OAuthService implements OnModuleInit {
 
   // ─── Auth code (nosso — para o Claude trocar em /oauth/token) ─────────────
 
-  async generateAuthCode(colaboradorId: number): Promise<string> {
+  async generateAuthCode(data: {
+    colaboradorId: number;
+    clientId: string;
+    redirectUri: string;
+    codeChallenge: string;
+    codeChallengeMethod: string;
+  }): Promise<string> {
     const code = randomBytes(32).toString('base64url');
     const expiresAt = new Date(Date.now() + AUTH_CODE_TTL_MS);
     await this.pool.execute(
-      `INSERT INTO oauth_auth_codes (code, colaborador_id, expires_at) VALUES (?, ?, ?)`,
-      [code, colaboradorId, expiresAt],
+      `INSERT INTO oauth_auth_codes
+         (code, colaborador_id, client_id, redirect_uri, code_challenge, code_challenge_method, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        code,
+        data.colaboradorId,
+        data.clientId,
+        data.redirectUri,
+        data.codeChallenge,
+        data.codeChallengeMethod,
+        expiresAt,
+      ],
     );
     return code;
   }
 
-  async consumeAuthCode(code: string): Promise<number> {
+  /**
+   * Consome o code (single-use, com lock transacional) e valida PKCE
+   * (RFC 7636): sem isso, quem interceptasse o code (histórico do navegador,
+   * log de proxy, referrer leak) conseguiria trocá-lo por token sozinho.
+   * Também revalida client_id/redirect_uri contra o que foi usado no
+   * /oauth/authorize (RFC 6749 §4.1.3).
+   */
+  async consumeAuthCode(
+    code: string,
+    clientId: string,
+    redirectUri: string,
+    codeVerifier: string,
+  ): Promise<number> {
     const conn = await this.pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -206,10 +318,9 @@ export class OAuthService implements OnModuleInit {
       // SELECT ... FOR UPDATE trava a linha até o commit, evitando que duas
       // trocas concorrentes do mesmo code (ex.: retry de rede) passem ambas
       // pelo SELECT antes que o UPDATE marque `used = 1`.
-      const [rows] = await conn.execute<
-        (RowDataPacket & { colaborador_id: number })[]
-      >(
-        `SELECT colaborador_id FROM oauth_auth_codes
+      const [rows] = await conn.execute<AuthCodeRow[]>(
+        `SELECT colaborador_id, client_id, redirect_uri, code_challenge, code_challenge_method
+           FROM oauth_auth_codes
           WHERE code = ? AND used = 0 AND expires_at > NOW()
           LIMIT 1 FOR UPDATE`,
         [code],
@@ -227,6 +338,25 @@ export class OAuthService implements OnModuleInit {
         );
       }
 
+      if (row.client_id !== clientId || row.redirect_uri !== redirectUri) {
+        await conn.rollback();
+        throw new HttpException(
+          {
+            error: 'invalid_grant',
+            error_description: 'client_id ou redirect_uri não correspondem ao authorize original',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      if (!this.verifyPkce(codeVerifier, row.code_challenge, row.code_challenge_method)) {
+        await conn.rollback();
+        throw new HttpException(
+          { error: 'invalid_grant', error_description: 'code_verifier inválido' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
       await conn.execute(
         `UPDATE oauth_auth_codes SET used = 1 WHERE code = ?`,
         [code],
@@ -240,6 +370,24 @@ export class OAuthService implements OnModuleInit {
     } finally {
       conn.release();
     }
+  }
+
+  /** RFC 7636 §4.6 — só aceita S256 (plain é vulnerável ao mesmo ataque que o PKCE existe pra prevenir). */
+  private verifyPkce(
+    codeVerifier: string,
+    codeChallenge: string | null,
+    codeChallengeMethod: string | null,
+  ): boolean {
+    if (!codeChallenge || codeChallengeMethod !== 'S256' || !codeVerifier) {
+      return false;
+    }
+    const computed = createHash('sha256').update(codeVerifier).digest('base64url');
+    const computedBuf = Buffer.from(computed);
+    const challengeBuf = Buffer.from(codeChallenge);
+    return (
+      computedBuf.length === challengeBuf.length &&
+      timingSafeEqual(computedBuf, challengeBuf)
+    );
   }
 
   // ─── Token generation ─────────────────────────────────────────────────────
@@ -282,6 +430,11 @@ export class OAuthService implements OnModuleInit {
     return randomBytes(40).toString('base64url');
   }
 
+  /** Novo id de família — gerado uma vez por login; carregado por toda a cadeia de rotações. */
+  issueFamilyId(): string {
+    return randomBytes(16).toString('hex');
+  }
+
   // ─── Persistence ──────────────────────────────────────────────────────────
 
   /**
@@ -296,19 +449,23 @@ export class OAuthService implements OnModuleInit {
     accessJti: string;
     refreshToken: string;
     profiles: string;
+    clientId: string;
+    familyId: string;
     expiresAt: Date;
     refreshExpiresAt: Date;
   }): Promise<void> {
     await this.pool.execute(
       `INSERT INTO oauth_tokens
-         (colaborador_id, user_session_id, access_jti, refresh_token, scopes, expires_at, refresh_expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         (colaborador_id, user_session_id, access_jti, refresh_token, scopes, client_id, family_id, expires_at, refresh_expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.colaboradorId,
         data.userSessionId,
         data.accessJti,
         data.refreshToken,
         data.profiles,
+        data.clientId,
+        data.familyId,
         data.expiresAt,
         data.refreshExpiresAt,
       ],
@@ -332,6 +489,8 @@ export class OAuthService implements OnModuleInit {
     colaboradorId: number;
     userSessionId: string;
     profiles: string;
+    clientId: string;
+    familyId: string;
   }> {
     const conn = await this.pool.getConnection();
     try {
@@ -340,11 +499,12 @@ export class OAuthService implements OnModuleInit {
       // SELECT ... FOR UPDATE trava a linha até o commit, evitando que dois
       // /oauth/refresh concorrentes com o mesmo refresh_token (retry do
       // cliente, reconexão duplicada) rotacionem o mesmo token duas vezes.
+      // Não filtramos `revoked = 0` aqui de propósito: precisamos diferenciar
+      // "nunca existiu / expirou" de "já foi rotacionado antes" para detectar reuso.
       const [rows] = await conn.execute<TokenRow[]>(
-        `SELECT colaborador_id, user_session_id, scopes
+        `SELECT colaborador_id, user_session_id, scopes, client_id, family_id, revoked
            FROM oauth_tokens
           WHERE refresh_token = ?
-            AND revoked = 0
             AND refresh_expires_at > NOW()
           LIMIT 1 FOR UPDATE`,
         [oldRefreshToken],
@@ -362,6 +522,30 @@ export class OAuthService implements OnModuleInit {
         );
       }
 
+      if (row.revoked) {
+        // Reuso de refresh token já rotacionado: sinal forte de roubo (alguém
+        // resgatou o token antes do dono legítimo). Mata a família inteira —
+        // toda a cadeia de refresh tokens dessa sessão de login — em vez de
+        // só devolver invalid_grant e deixar o resto da família ativo.
+        if (row.family_id) {
+          await conn.execute(
+            `UPDATE oauth_tokens SET revoked = 1 WHERE family_id = ?`,
+            [row.family_id],
+          );
+        }
+        await conn.commit();
+        this.logger.warn(
+          `Reuso de refresh token detectado (colaborador_id=${row.colaborador_id}, family_id=${row.family_id}) — família inteira revogada`,
+        );
+        throw new HttpException(
+          {
+            error: 'invalid_grant',
+            error_description: 'Refresh token já utilizado — sessão revogada por segurança',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
       await conn.execute(
         `UPDATE oauth_tokens SET revoked = 1 WHERE refresh_token = ?`,
         [oldRefreshToken],
@@ -372,6 +556,8 @@ export class OAuthService implements OnModuleInit {
         colaboradorId: row.colaborador_id,
         userSessionId: row.user_session_id,
         profiles: row.scopes,
+        clientId: row.client_id ?? '',
+        familyId: row.family_id ?? this.issueFamilyId(),
       };
     } catch (err) {
       await conn.rollback().catch(() => {});

@@ -9,7 +9,6 @@ import {
   Res,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { randomBytes } from 'crypto';
 import { decodeJwt } from 'jose';
 import { ConfigService } from '@nestjs/config';
 import { OAuthService } from './oauth.service';
@@ -44,48 +43,84 @@ export class OAuthController {
   // ─── Dynamic Client Registration (RFC 7591) ───────────────────────────────
   /**
    * O mcp-remote (e outros clientes OAuth) registram-se aqui antes de iniciar o fluxo.
-   * Geramos um client_id aleatório e devolvemos — não precisamos armazenar porque
-   * não validamos client_id no /authorize (a segurança vem do HMAC do B2B).
+   * Persistimos client_id + redirect_uris: /oauth/authorize passa a validar o
+   * redirect_uri recebido contra esta lista (match exato), fechando o open
+   * redirect que existia quando qualquer redirect_uri era aceito sem checagem.
    */
   @Post('oauth/register')
-  register(@Req() req: Request) {
+  async register(@Req() req: Request) {
     const body = req.body as Record<string, any>;
+    const redirectUris: string[] = Array.isArray(body.redirect_uris)
+      ? body.redirect_uris
+      : [];
+
+    if (!redirectUris.length) {
+      throw new HttpException(
+        { error: 'invalid_client_metadata', error_description: 'redirect_uris é obrigatório' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const clientId = await this.oauthService.registerClient(redirectUris);
+
     return {
-      client_id: randomBytes(16).toString('hex'),
+      client_id: clientId,
       client_id_issued_at: Math.floor(Date.now() / 1000),
-      redirect_uris: body.redirect_uris ?? [],
+      redirect_uris: redirectUris,
       token_endpoint_auth_method: 'none',
-      grant_types: ['authorization_code'],
+      grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
     };
   }
 
   // ─── Passo 1: Claude inicia o fluxo ───────────────────────────────────────
   /**
-   * Claude chama /oauth/authorize com seu redirect_uri e state.
-   * Geramos nosso próprio state, salvamos o contexto do Claude e redirecionamos ao B2B.
+   * Claude chama /oauth/authorize com client_id, redirect_uri, state e PKCE
+   * (code_challenge/code_challenge_method=S256 — obrigatório, RFC 7636/OAuth 2.1
+   * para clients públicos). Validamos redirect_uri contra o que foi registrado
+   * em /oauth/register, guardamos o contexto e redirecionamos ao B2B.
    */
   @Get('oauth/authorize')
-  authorize(
+  async authorize(
+    @Query('client_id') clientId: string,
     @Query('redirect_uri') claudeRedirectUri: string,
     @Query('state') claudeState: string,
+    @Query('code_challenge') codeChallenge: string,
+    @Query('code_challenge_method') codeChallengeMethod: string,
     @Res() res: Response,
   ) {
-    if (!claudeRedirectUri || !claudeState) {
+    if (!clientId || !claudeRedirectUri || !claudeState) {
       throw new HttpException(
-        'Missing required parameters: redirect_uri, state',
+        { error: 'invalid_request', error_description: 'Missing required parameters: client_id, redirect_uri, state' },
         HttpStatus.BAD_REQUEST,
       );
     }
+
+    if (!codeChallenge || codeChallengeMethod !== 'S256') {
+      throw new HttpException(
+        {
+          error: 'invalid_request',
+          error_description: 'code_challenge (method S256) é obrigatório',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Lança 400 se client_id for desconhecido ou redirect_uri não bater
+    // exatamente com algum registrado em /oauth/register.
+    await this.oauthService.validateClientRedirectUri(clientId, claudeRedirectUri);
 
     const publicUrl = this.config.getOrThrow<string>('PUBLIC_URL');
     const b2bLoginUrl = this.config.getOrThrow<string>('B2B_LOGIN_URL');
     const callbackUri = `${publicUrl}/oauth/callback`;
 
-    const ourState = this.oauthService.createPendingState(
+    const ourState = this.oauthService.createPendingState({
       claudeRedirectUri,
       claudeState,
-    );
+      clientId,
+      codeChallenge,
+      codeChallengeMethod,
+    });
 
     const target = new URL(b2bLoginUrl);
     target.searchParams.set('redirect_uri', callbackUri);
@@ -113,7 +148,7 @@ export class OAuthController {
     }
 
     // 1. Recupera contexto do Claude e valida o state (previne CSRF)
-    const { claudeRedirectUri, claudeState } =
+    const { claudeRedirectUri, claudeState, clientId, codeChallenge, codeChallengeMethod } =
       this.oauthService.consumePendingState(ourState);
 
     // 2. Verifica o code HMAC-SHA256 localmente (sem chamada ao B2B)
@@ -125,8 +160,15 @@ export class OAuthController {
       callbackUri,
     );
 
-    // 3. Gera nosso próprio auth code (single-use, 5 min)
-    const ourCode = await this.oauthService.generateAuthCode(colaboradorId);
+    // 3. Gera nosso próprio auth code (single-use, 5 min), vinculado ao
+    //    client_id/redirect_uri/code_challenge do /authorize original.
+    const ourCode = await this.oauthService.generateAuthCode({
+      colaboradorId,
+      clientId,
+      redirectUri: claudeRedirectUri,
+      codeChallenge,
+      codeChallengeMethod,
+    });
 
     // 4. Redireciona ao Claude com nosso code e o state original
     const target = new URL(claudeRedirectUri);
@@ -147,7 +189,7 @@ export class OAuthController {
     console.log('[TOKEN] body recebido:', JSON.stringify(body));
     console.log('[TOKEN] content-type:', req.headers['content-type']);
 
-    const { grant_type, code } = body;
+    const { grant_type, code, client_id, redirect_uri, code_verifier } = body;
     console.log('[TOKEN] grant_type:', grant_type, '| code:', code);
 
     if (grant_type !== 'authorization_code') {
@@ -158,19 +200,27 @@ export class OAuthController {
       );
     }
 
-    if (!code) {
-      console.log('[TOKEN] ERRO: code ausente no body');
+    if (!code || !client_id || !redirect_uri || !code_verifier) {
+      console.log('[TOKEN] ERRO: parâmetro obrigatório ausente no body');
       throw new HttpException(
-        { error: 'invalid_request', error_description: 'Missing code' },
+        {
+          error: 'invalid_request',
+          error_description: 'Missing code, client_id, redirect_uri or code_verifier',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
 
-    // 1. Consome o auth code e obtém o colaboradorId
+    // 1. Consome o auth code (valida PKCE + client_id/redirect_uri contra o /authorize original)
     console.log('[TOKEN] consumindo auth code:', code);
     let colaboradorId: number;
     try {
-      colaboradorId = await this.oauthService.consumeAuthCode(code);
+      colaboradorId = await this.oauthService.consumeAuthCode(
+        code,
+        client_id,
+        redirect_uri,
+        code_verifier,
+      );
       console.log('[TOKEN] auth code consumido, colaboradorId:', colaboradorId);
     } catch (err) {
       console.log('[TOKEN] ERRO ao consumir auth code:', err);
@@ -218,6 +268,7 @@ export class OAuthController {
 
     const refreshToken = this.oauthService.issueRefreshToken();
     const refreshExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const familyId = this.oauthService.issueFamilyId();
 
     // 4. Persiste tokens e registra o acesso
     const ip =
@@ -236,6 +287,8 @@ export class OAuthController {
           accessJti: jti,
           refreshToken,
           profiles: colab.profiles.join(' '),
+          clientId: client_id,
+          familyId,
           expiresAt,
           refreshExpiresAt,
         }),
@@ -294,6 +347,8 @@ export class OAuthController {
       colaboradorId,
       userSessionId,
       profiles: storedProfiles,
+      clientId,
+      familyId,
     } = await this.oauthService.validateAndRotateRefreshToken(refresh_token);
 
     // Tenta buscar dados atualizados do banco; fallback para os perfis armazenados no token
@@ -326,6 +381,8 @@ export class OAuthController {
       accessJti: jti,
       refreshToken: newRefreshToken,
       profiles: colab.profiles.join(' '),
+      clientId,
+      familyId,
       expiresAt,
       refreshExpiresAt: newRefreshExpiresAt,
     });

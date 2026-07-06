@@ -1,5 +1,11 @@
 -- Schema do banco de dados para o servidor MCP
 -- Execute: mysql -u root -p < schema.sql
+--
+-- Este arquivo é a "foto" completa do schema para banco novo (todo CREATE é
+-- IF NOT EXISTS). Não é reaplicado automaticamente em bancos já existentes —
+-- toda alteração de schema em banco já existente vive em `migrations/`, uma
+-- pasta por alteração, nomeada `AAAAMMDD_HHMM/` com um `schema.sql` contendo
+-- os `ALTER TABLE`/`CREATE TABLE` daquela mudança. Ver migrations/README.md.
 
 CREATE DATABASE IF NOT EXISTS ai_mcp
   CHARACTER SET utf8mb4
@@ -19,6 +25,8 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
   access_jti          VARCHAR(64)          NULL,         -- jti do JWT (para revogação futura)
   refresh_token       VARCHAR(255)     NOT NULL,         -- token opaco, single-rotation
   scopes              VARCHAR(1024)    NOT NULL DEFAULT '',
+  client_id           VARCHAR(64)          NULL,         -- client_id emitido em /oauth/register
+  family_id           VARCHAR(64)          NULL,         -- id da família de refresh tokens (mesma em toda a cadeia de rotação)
   expires_at          TIMESTAMP        NOT NULL,         -- expiração do access_token
   refresh_expires_at  TIMESTAMP        NOT NULL,         -- expiração do refresh_token (padrão: +30 dias)
   revoked             TINYINT(1)       NOT NULL DEFAULT 0,
@@ -28,7 +36,22 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
   PRIMARY KEY (id),
   UNIQUE KEY uq_oauth_refresh (refresh_token),
   KEY idx_oauth_colab   (colaborador_id),
-  KEY idx_oauth_jti     (access_jti)
+  KEY idx_oauth_jti     (access_jti),
+  KEY idx_oauth_family  (family_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ── Clientes OAuth registrados (RFC 7591) ────────────────────────────────────
+-- Registrados dinamicamente em /oauth/register. `redirect_uris` é a lista de
+-- URIs permitidas para esse client — /oauth/authorize e /oauth/token validam
+-- o redirect_uri recebido contra esta lista (match exato), fechando o
+-- open-redirect que existia quando qualquer redirect_uri era aceito.
+
+CREATE TABLE IF NOT EXISTS oauth_clients (
+  client_id       VARCHAR(64)      NOT NULL,
+  redirect_uris   TEXT             NOT NULL,          -- JSON array de URIs exatas permitidas
+  created_at      TIMESTAMP        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (client_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ── Auditoria de acessos ─────────────────────────────────────────────────────
@@ -51,11 +74,15 @@ CREATE TABLE IF NOT EXISTS oauth_access_log (
 -- Persistidos para sobreviver hot-reload do servidor.
 
 CREATE TABLE IF NOT EXISTS oauth_auth_codes (
-  code            VARCHAR(64)      NOT NULL,
-  colaborador_id  INT UNSIGNED     NOT NULL,
-  expires_at      TIMESTAMP        NOT NULL,
-  used            TINYINT(1)       NOT NULL DEFAULT 0,
-  created_at      TIMESTAMP        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  code                    VARCHAR(64)      NOT NULL,
+  colaborador_id          INT UNSIGNED     NOT NULL,
+  client_id               VARCHAR(64)          NULL,   -- client_id que iniciou o /oauth/authorize
+  redirect_uri            VARCHAR(512)         NULL,   -- redirect_uri validado no /oauth/authorize (revalidado no /oauth/token)
+  code_challenge          VARCHAR(128)         NULL,   -- PKCE (RFC 7636) — base64url(SHA256(code_verifier))
+  code_challenge_method   VARCHAR(16)          NULL,   -- sempre 'S256' — 'plain' não é aceito
+  expires_at              TIMESTAMP        NOT NULL,
+  used                    TINYINT(1)       NOT NULL DEFAULT 0,
+  created_at              TIMESTAMP        NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
   PRIMARY KEY (code),
   KEY idx_auth_code_expires (expires_at)
