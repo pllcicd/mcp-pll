@@ -112,6 +112,7 @@ Ver documentação individual em [`docs/tools/`](../tools/).
 | `cmv_parts_consumption_systemic_match` | `src/tools/cmv.tool.ts` | [tools/cmv_parts_consumption_systemic_match.md](../tools/cmv_parts_consumption_systemic_match.md) |
 | `cmv_parts_consumption_awaiting_match` | `src/tools/cmv.tool.ts` | [tools/cmv_parts_consumption_awaiting_match.md](../tools/cmv_parts_consumption_awaiting_match.md) |
 | `cmv_parts_operational_loss` | `src/tools/cmv.tool.ts` | [tools/cmv_parts_operational_loss.md](../tools/cmv_parts_operational_loss.md) |
+| `cmv_parts_stock_hit` | `src/tools/cmv.tool.ts` | [tools/cmv_parts_stock_hit.md](../tools/cmv_parts_stock_hit.md) |
 | `read_tool_source` | `src/tools/read-source.tool.ts` | [tools/read_tool_source.md](../tools/read_tool_source.md) |
 | `view_schema` | `src/tools/schema.tool.ts` | [tools/view_schema.md](../tools/view_schema.md) |
 | `admin_register_tool` | `src/tools/admin.tool.ts` | [tools/admin_register_tool.md](../tools/admin_register_tool.md) |

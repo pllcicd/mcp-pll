@@ -38,6 +38,7 @@ export function registerCmvTools(
     'cmv_parts_rupture_analysis',
     'Gera o relatório de Análise de Ruptura de Peças (CMV) e retorna um link de download (.xlsx) válido por tempo limitado.',
     dbParam,
+    { title: 'Relatório: Análise de Ruptura de Peças' },
     ({ database }) =>
       cmvTool('cmv_parts_rupture_analysis', 'parts-rupture-analysis', database),
   );
@@ -46,6 +47,7 @@ export function registerCmvTools(
     'cmv_parts_consumption_physical_match',
     'Gera o relatório de Consumo de Peças Casadas Fisicamente (CMV) e retorna um link de download (.xlsx) válido por tempo limitado.',
     dbParam,
+    { title: 'Relatório: Consumo de Peças Casadas Fisicamente' },
     ({ database }) =>
       cmvTool(
         'cmv_parts_consumption_physical_match',
@@ -58,6 +60,7 @@ export function registerCmvTools(
     'cmv_parts_consumption_systemic_match',
     'Gera o relatório de Consumo de Peças Casadas Sistemicamente (CMV) e retorna um link de download (.xlsx) válido por tempo limitado.',
     dbParam,
+    { title: 'Relatório: Consumo de Peças Casadas Sistemicamente' },
     ({ database }) =>
       cmvTool(
         'cmv_parts_consumption_systemic_match',
@@ -70,6 +73,7 @@ export function registerCmvTools(
     'cmv_parts_consumption_awaiting_match',
     'Gera o relatório de Consumo de Peças Aguardando Casamento (CMV) e retorna um link de download (.xlsx) válido por tempo limitado.',
     dbParam,
+    { title: 'Relatório: Consumo de Peças Aguardando Casamento' },
     ({ database }) =>
       cmvTool(
         'cmv_parts_consumption_awaiting_match',
@@ -82,7 +86,17 @@ export function registerCmvTools(
     'cmv_parts_operational_loss',
     'Gera o relatório de Perda Operacional de Peças (CMV) e retorna um link de download (.xlsx) válido por tempo limitado.',
     dbParam,
+    { title: 'Relatório: Perda Operacional de Peças' },
     ({ database }) =>
       cmvTool('cmv_parts_operational_loss', 'parts-operational-loss', database),
+  );
+
+  server.tool(
+    'cmv_parts_stock_hit',
+    'Gera o relatório de Estoque Disponível de Peças não vinculadas a nenhum pedido (CMV) e retorna um link de download (.xlsx) válido por tempo limitado.',
+    dbParam,
+    { title: 'Relatório: Estoque Disponível de Peças sem Pedido' },
+    ({ database }) =>
+      cmvTool('cmv_parts_stock_hit', 'parts-stock-hit', database),
   );
 }

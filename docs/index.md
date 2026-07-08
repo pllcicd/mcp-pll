@@ -84,6 +84,7 @@ Todas as ferramentas exigem o escopo **USO** (execução) e, quando aplicável, 
 | `cmv_parts_consumption_systemic_match` | Relatório CMV: Consumo Casado Sistemicamente | [tools/cmv_parts_consumption_systemic_match.md](tools/cmv_parts_consumption_systemic_match.md) |
 | `cmv_parts_consumption_awaiting_match` | Relatório CMV: Consumo Aguardando Casamento | [tools/cmv_parts_consumption_awaiting_match.md](tools/cmv_parts_consumption_awaiting_match.md) |
 | `cmv_parts_operational_loss` | Relatório CMV: Perda Operacional | [tools/cmv_parts_operational_loss.md](tools/cmv_parts_operational_loss.md) |
+| `cmv_parts_stock_hit` | Relatório CMV: Estoque Disponível de Peças sem Pedido | [tools/cmv_parts_stock_hit.md](tools/cmv_parts_stock_hit.md) |
 | `read_tool_source` | Lê o código-fonte `.ts` de outra ferramenta (exige LEITURA do alvo) | [tools/read_tool_source.md](tools/read_tool_source.md) |
 | `view_schema` | Retorna o schema (colunas, tipos, chaves) de qualquer tabela do banco de dados | [tools/view_schema.md](tools/view_schema.md) |
 | `admin_register_tool` | Cadastra/atualiza uma ferramenta no registro RBAC | [tools/admin_register_tool.md](tools/admin_register_tool.md) |

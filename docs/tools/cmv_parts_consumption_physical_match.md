@@ -1,6 +1,7 @@
 # Ferramenta: cmv_parts_consumption_physical_match
 
 **Nome interno:** `cmv_parts_consumption_physical_match`
+**Título de exibição:** `Relatório: Consumo de Peças Casadas Fisicamente`
 **Módulo:** `McpModule` (`src/mcp/mcp.service.ts`)
 **Escopos necessários:** `USO` (concedido por perfil em `mcp_perfis_escopo` — ver [modules/mcp.md](../modules/mcp.md#rbac-de-ferramentas-escopos-leitura--uso))
 

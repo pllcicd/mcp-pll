@@ -1,6 +1,7 @@
 # Ferramenta: cmv_parts_operational_loss
 
 **Nome interno:** `cmv_parts_operational_loss`
+**Título de exibição:** `Relatório: Perda Operacional de Peças`
 **Módulo:** `McpModule` (`src/mcp/mcp.service.ts`)
 **Escopos necessários:** `USO` (concedido por perfil em `mcp_perfis_escopo` — ver [modules/mcp.md](../modules/mcp.md#rbac-de-ferramentas-escopos-leitura--uso))
 
