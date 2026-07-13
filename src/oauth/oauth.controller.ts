@@ -186,22 +186,22 @@ export class OAuthController {
   @Post('oauth/token')
   async token(@Req() req: Request) {
     const body = req.body as Record<string, string>;
-    console.log('[TOKEN] body recebido:', JSON.stringify(body));
-    console.log('[TOKEN] content-type:', req.headers['content-type']);
+    const { grant_type } = body;
 
-    const { grant_type, code, client_id, redirect_uri, code_verifier } = body;
-    console.log('[TOKEN] grant_type:', grant_type, '| code:', code);
+    if (grant_type === 'refresh_token') {
+      return this.handleRefreshGrant(body);
+    }
 
     if (grant_type !== 'authorization_code') {
-      console.log('[TOKEN] ERRO: grant_type inválido:', grant_type);
       throw new HttpException(
         { error: 'unsupported_grant_type' },
         HttpStatus.BAD_REQUEST,
       );
     }
 
+    const { code, client_id, redirect_uri, code_verifier } = body;
+
     if (!code || !client_id || !redirect_uri || !code_verifier) {
-      console.log('[TOKEN] ERRO: parâmetro obrigatório ausente no body');
       throw new HttpException(
         {
           error: 'invalid_request',
@@ -212,33 +212,18 @@ export class OAuthController {
     }
 
     // 1. Consome o auth code (valida PKCE + client_id/redirect_uri contra o /authorize original)
-    console.log('[TOKEN] consumindo auth code:', code);
-    let colaboradorId: number;
-    try {
-      colaboradorId = await this.oauthService.consumeAuthCode(
-        code,
-        client_id,
-        redirect_uri,
-        code_verifier,
-      );
-      console.log('[TOKEN] auth code consumido, colaboradorId:', colaboradorId);
-    } catch (err) {
-      console.log('[TOKEN] ERRO ao consumir auth code:', err);
-      throw err;
-    }
+    const colaboradorId = await this.oauthService.consumeAuthCode(
+      code,
+      client_id,
+      redirect_uri,
+      code_verifier,
+    );
 
     // 2. Busca scopes em grupopll_master.cadastro_colaborador
     let colab;
     try {
       colab = await this.colaborador.getColaboradorScopes(colaboradorId);
-      console.log(
-        '[TOKEN] colaborador encontrado:',
-        colab.email,
-        '| profiles:',
-        colab.profiles,
-      );
     } catch (err) {
-      console.log('[TOKEN] ERRO ao buscar colaborador:', err);
       throw new HttpException(
         {
           error: 'invalid_grant',
@@ -250,21 +235,9 @@ export class OAuthController {
 
     // 3. Resolve as concessões ferramenta:escopo dos perfis e emite JWT RS256
     //    (com claim scope) e refresh_token opaco
-    console.log('[TOKEN] gerando JWT...');
-    let jti: string, accessToken: string, expiresAt: Date, expiresIn: number;
-    try {
-      const grants = await this.scopeService.resolveGrants(colab.profiles);
-      ({
-        jti,
-        token: accessToken,
-        expiresAt,
-        expiresIn,
-      } = await this.oauthService.generateToken(colab, grants));
-      console.log('[TOKEN] JWT gerado, jti:', jti, '| expiresIn:', expiresIn);
-    } catch (err) {
-      console.log('[TOKEN] ERRO ao gerar JWT:', err);
-      throw err;
-    }
+    const grants = await this.scopeService.resolveGrants(colab.profiles);
+    const { jti, token: accessToken, expiresAt, expiresIn } =
+      await this.oauthService.generateToken(colab, grants);
 
     const refreshToken = this.oauthService.issueRefreshToken();
     const refreshExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -278,60 +251,38 @@ export class OAuthController {
       req.ip ??
       null;
 
-    console.log('[TOKEN] persistindo tokens...');
-    try {
-      await Promise.all([
-        this.oauthService.persistTokens({
-          colaboradorId: colab.id,
-          userSessionId: code,
-          accessJti: jti,
-          refreshToken,
-          profiles: colab.profiles.join(' '),
-          clientId: client_id,
-          familyId,
-          expiresAt,
-          refreshExpiresAt,
-        }),
-        this.oauthService.logAccess(colab.id, code, ip),
-      ]);
-      console.log('[TOKEN] tokens persistidos com sucesso');
-    } catch (err) {
-      console.log('[TOKEN] ERRO ao persistir tokens:', err);
-      throw err;
-    }
+    await Promise.all([
+      this.oauthService.persistTokens({
+        colaboradorId: colab.id,
+        userSessionId: code,
+        accessJti: jti,
+        refreshToken,
+        profiles: colab.profiles.join(' '),
+        clientId: client_id,
+        familyId,
+        expiresAt,
+        refreshExpiresAt,
+      }),
+      this.oauthService.logAccess(colab.id, code, ip),
+    ]);
 
-    const response = {
+    return {
       access_token: accessToken,
       refresh_token: refreshToken,
       token_type: 'Bearer',
       expires_in: expiresIn,
     };
-    console.log(
-      '[TOKEN] resposta final:',
-      JSON.stringify({
-        ...response,
-        access_token: '[JWT]',
-        refresh_token: '[OPAQUE]',
-      }),
-    );
-    return response;
   }
 
   // ─── Passo 4 (eventual): Claude renova o access_token ─────────────────────
   /**
    * Troca refresh_token por novo access_token. Rotaciona o refresh_token (single-rotation).
+   * Precisa ser tratado dentro de /oauth/token: é o único token_endpoint anunciado
+   * no discovery, e por RFC 6749 §6 o client manda grant_type=refresh_token para lá,
+   * não para uma rota separada.
    */
-  @Post('oauth/refresh')
-  async refresh(@Req() req: Request) {
-    const body = req.body as Record<string, string>;
-    const { grant_type, refresh_token } = body;
-
-    if (grant_type !== 'refresh_token') {
-      throw new HttpException(
-        { error: 'unsupported_grant_type' },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
+  private async handleRefreshGrant(body: Record<string, string>) {
+    const { refresh_token } = body;
 
     if (!refresh_token) {
       throw new HttpException(
