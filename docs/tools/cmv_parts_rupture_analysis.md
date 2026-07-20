@@ -20,6 +20,7 @@ O arquivo é gerado e armazenado no S3 pela API externa. Chamadas repetidas dent
 | Parâmetro | Tipo | Obrigatório | Descrição |
 |---|---|---|---|
 | `database` | string | não | Banco da empresa (padrão: `crmoema`) |
+| `forceRefresh` | boolean | não | Força a regeração do relatório ignorando cache (padrão: `false`). Usar apenas se o usuário pedir explicitamente. |
 
 ---
 

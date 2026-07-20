@@ -40,11 +40,15 @@ export class McpService implements OnModuleInit {
   private async fetchCmvReport(
     path: string,
     database: string,
+    forceRefresh?: boolean,
   ): Promise<{ url: string; expiresAt: string }> {
     const token = await this.pllAuth.getToken();
     const response = await axios.get<{ url: string; expiresAt: string }>(
       `${this.cmvBaseUrl}/${path}`,
-      { params: { database }, headers: { Authorization: `Bearer ${token}` } },
+      {
+        params: { database, ...(forceRefresh ? { forceRefresh } : {}) },
+        headers: { Authorization: `Bearer ${token}` },
+      },
     );
     return response.data;
   }

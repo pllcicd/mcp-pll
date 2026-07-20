@@ -18,6 +18,7 @@ Gera o relatório de **Perda Operacional de Peças** (CMV) na API do Grupo PLL e
 | Parâmetro | Tipo | Obrigatório | Descrição |
 |---|---|---|---|
 | `database` | string | não | Banco da empresa (padrão: `crmoema`) |
+| `forceRefresh` | boolean | não | Força a regeração do relatório ignorando cache (padrão: `false`). Usar apenas se o usuário pedir explicitamente. |
 
 ---
 

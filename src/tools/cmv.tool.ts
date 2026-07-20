@@ -4,6 +4,7 @@ import type { ToolContext } from './types';
 type FetchCmvReport = (
   path: string,
   database: string,
+  forceRefresh?: boolean,
 ) => Promise<{ url: string; expiresAt: string }>;
 
 const dbParam = {
@@ -11,6 +12,12 @@ const dbParam = {
     .string()
     .optional()
     .describe('Banco da empresa (padrão: crmoema)'),
+  forceRefresh: z
+    .boolean()
+    .optional()
+    .describe(
+      'Força a regeração do relatório ignorando cache (padrão: false). Usar apenas true se o usuário pedir explicitamente.',
+    ),
 };
 
 const readOnlyAnnotations = {
@@ -29,10 +36,11 @@ export function registerCmvTools(
     toolName: string,
     path: string,
     database = 'crmoema',
+    forceRefresh?: boolean,
   ) => {
     const deny = await authorize(toolName);
     if (deny) return deny;
-    const result = await fetchCmvReport(path, database);
+    const result = await fetchCmvReport(path, database, forceRefresh);
     return {
       content: [
         { type: 'text' as const, text: JSON.stringify(result, null, 2) },
@@ -45,8 +53,13 @@ export function registerCmvTools(
     'Gera o relatório de Análise de Ruptura de Peças (CMV) e retorna um link de download (.xlsx) válido por tempo limitado.',
     dbParam,
     { title: 'Relatório: Análise de Ruptura de Peças', ...readOnlyAnnotations },
-    ({ database }) =>
-      cmvTool('cmv_parts_rupture_analysis', 'parts-rupture-analysis', database),
+    ({ database, forceRefresh }) =>
+      cmvTool(
+        'cmv_parts_rupture_analysis',
+        'parts-rupture-analysis',
+        database,
+        forceRefresh,
+      ),
   );
 
   server.tool(
@@ -57,11 +70,12 @@ export function registerCmvTools(
       title: 'Relatório: Consumo de Peças Casadas Fisicamente',
       ...readOnlyAnnotations,
     },
-    ({ database }) =>
+    ({ database, forceRefresh }) =>
       cmvTool(
         'cmv_parts_consumption_physical_match',
         'parts-consumption-physical-match',
         database,
+        forceRefresh,
       ),
   );
 
@@ -73,11 +87,12 @@ export function registerCmvTools(
       title: 'Relatório: Consumo de Peças Casadas Sistemicamente',
       ...readOnlyAnnotations,
     },
-    ({ database }) =>
+    ({ database, forceRefresh }) =>
       cmvTool(
         'cmv_parts_consumption_systemic_match',
         'parts-consumption-systemic-match',
         database,
+        forceRefresh,
       ),
   );
 
@@ -89,11 +104,12 @@ export function registerCmvTools(
       title: 'Relatório: Consumo de Peças Aguardando Casamento',
       ...readOnlyAnnotations,
     },
-    ({ database }) =>
+    ({ database, forceRefresh }) =>
       cmvTool(
         'cmv_parts_consumption_awaiting_match',
         'parts-consumption-awaiting-match',
         database,
+        forceRefresh,
       ),
   );
 
@@ -102,8 +118,13 @@ export function registerCmvTools(
     'Gera o relatório de Perda Operacional de Peças (CMV) e retorna um link de download (.xlsx) válido por tempo limitado.',
     dbParam,
     { title: 'Relatório: Perda Operacional de Peças', ...readOnlyAnnotations },
-    ({ database }) =>
-      cmvTool('cmv_parts_operational_loss', 'parts-operational-loss', database),
+    ({ database, forceRefresh }) =>
+      cmvTool(
+        'cmv_parts_operational_loss',
+        'parts-operational-loss',
+        database,
+        forceRefresh,
+      ),
   );
 
   server.tool(
@@ -114,7 +135,7 @@ export function registerCmvTools(
       title: 'Relatório: Estoque Disponível de Peças sem Pedido',
       ...readOnlyAnnotations,
     },
-    ({ database }) =>
-      cmvTool('cmv_parts_stock_hit', 'parts-stock-hit', database),
+    ({ database, forceRefresh }) =>
+      cmvTool('cmv_parts_stock_hit', 'parts-stock-hit', database, forceRefresh),
   );
 }

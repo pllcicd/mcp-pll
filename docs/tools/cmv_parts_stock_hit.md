@@ -18,6 +18,7 @@ Gera o relatório de **Estoque Disponível de Peças** não vinculadas a nenhum 
 | Parâmetro | Tipo | Obrigatório | Descrição |
 |---|---|---|---|
 | `database` | string | não | Banco da empresa (padrão: `crmoema`) |
+| `forceRefresh` | boolean | não | Força a regeração do relatório ignorando cache (padrão: `false`). Usar apenas se o usuário pedir explicitamente. |
 
 ---
 
