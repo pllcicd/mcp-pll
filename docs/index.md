@@ -93,9 +93,13 @@ Todas as ferramentas exigem o escopo **USO** (execução) e, quando aplicável, 
 | `admin_revoke_perfil_scope` | Revoga (soft-delete) um escopo de ferramenta de um perfil | [tools/admin_revoke_perfil_scope.md](tools/admin_revoke_perfil_scope.md) |
 | `admin_list_grants` | Lista as concessões RBAC atuais | [tools/admin_list_grants.md](tools/admin_list_grants.md) |
 | `create_github_issue` | Cria uma issue no GitHub (ex.: sugestão de nova ferramenta) | [tools/create_github_issue.md](tools/create_github_issue.md) |
+| `bypass_whatsapp_sent` | Força o reenvio de um item da fila `whatsapp_sent`, sobrescrevendo badlist/blacklist (ação sensível, restrita a perfis administrativos) | [tools/bypass_whatsapp_sent.md](tools/bypass_whatsapp_sent.md) |
 
 > Como adicionar uma nova ferramenta (padrão de código, cadastro nas tabelas RBAC,
 > concessão de escopo): [adicionar-ferramenta.md](adicionar-ferramenta.md).
+>
+> Como cadastrar uma nova API externa (autenticação, montagem de URL, e o
+> mesmo cadastro RBAC obrigatório): [como-cadastrar-api-externa.md](como-cadastrar-api-externa.md).
 
 ---
 

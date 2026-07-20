@@ -15,10 +15,12 @@ import { registerAdminTools } from '../tools/admin.tool';
 import { registerColaboradorTools } from '../tools/colaborador.tool';
 import { registerSchemaTools } from '../tools/schema.tool';
 import { registerGithubTools } from '../tools/github.tool';
+import { registerMensageriaTools } from '../tools/mensageria.tool';
 
 @Injectable()
 export class McpService implements OnModuleInit {
   private cmvBaseUrl: string;
+  private mensageriaBaseUrl: string;
 
   constructor(
     @Inject(DB_POOL) private readonly pool: Pool,
@@ -26,10 +28,13 @@ export class McpService implements OnModuleInit {
     private readonly pllAuth: PllApiAuthService,
   ) {
     this.cmvBaseUrl = '';
+    this.mensageriaBaseUrl = '';
   }
 
   onModuleInit() {
-    this.cmvBaseUrl = `${this.config.getOrThrow<string>('GRUPOPLL_API_URL')}/nasajon/reports/cmv`;
+    const apiUrl = this.config.getOrThrow<string>('GRUPOPLL_API_URL');
+    this.cmvBaseUrl = `${apiUrl}/nasajon/reports/cmv`;
+    this.mensageriaBaseUrl = `${apiUrl}/sac/notificacoes/message`;
   }
 
   private async fetchCmvReport(
@@ -40,6 +45,16 @@ export class McpService implements OnModuleInit {
     const response = await axios.get<{ url: string; expiresAt: string }>(
       `${this.cmvBaseUrl}/${path}`,
       { params: { database }, headers: { Authorization: `Bearer ${token}` } },
+    );
+    return response.data;
+  }
+
+  private async bypassWhatsappSent(id: number): Promise<unknown> {
+    const token = await this.pllAuth.getToken();
+    const response = await axios.post(
+      `${this.mensageriaBaseUrl}/process-single-force`,
+      { id },
+      { headers: { Authorization: `Bearer ${token}` } },
     );
     return response.data;
   }
@@ -132,6 +147,7 @@ export class McpService implements OnModuleInit {
     registerColaboradorTools(ctx);
     registerSchemaTools(ctx);
     registerGithubTools(ctx);
+    registerMensageriaTools(ctx, this.bypassWhatsappSent.bind(this));
 
     return server;
   }

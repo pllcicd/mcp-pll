@@ -121,6 +121,7 @@ Ver documentação individual em [`docs/tools/`](../tools/).
 | `admin_revoke_perfil_scope` | `src/tools/admin.tool.ts` | [tools/admin_revoke_perfil_scope.md](../tools/admin_revoke_perfil_scope.md) |
 | `admin_list_grants` | `src/tools/admin.tool.ts` | [tools/admin_list_grants.md](../tools/admin_list_grants.md) |
 | `create_github_issue` | `src/tools/github.tool.ts` | [tools/create_github_issue.md](../tools/create_github_issue.md) |
+| `bypass_whatsapp_sent` | `src/tools/mensageria.tool.ts` | [tools/bypass_whatsapp_sent.md](../tools/bypass_whatsapp_sent.md) |
 
 ---
 

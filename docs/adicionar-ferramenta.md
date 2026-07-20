@@ -7,6 +7,11 @@ RBAC e por que ela precisa de escopo antes de ficar disponível para alguém.
 > Comando pronto: rode `/create-mcp-tool` no Claude Code dentro deste repositório
 > — ele segue este mesmo guia. Definição em
 > [.claude/commands/create-mcp-tool.md](../.claude/commands/create-mcp-tool.md).
+>
+> Ferramenta que vai chamar uma API HTTP externa (não só MySQL local)? Veja
+> também [como-cadastrar-api-externa.md](como-cadastrar-api-externa.md), que
+> complementa este guia com auth/URL da API — o cadastro RBAC (seção 3 abaixo)
+> continua sendo obrigatório do mesmo jeito.
 
 ---
 
