@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { z } from 'zod';
 import type { ToolContext } from './types';
 
@@ -188,7 +189,7 @@ export function registerGitTools({ server, pool, authorize }: ToolContext) {
 
   server.tool(
     'git_referencia_listar',
-    'Lista as referências cruzadas cadastradas, opcionalmente filtrando por projeto de origem ou de destino',
+    'Lista as referências cruzadas cadastradas, opcionalmente filtrando por projeto de origem ou de destino. Ao analisar uma ferramenta/arquivo local e notar que ele depende de código de outro projeto, use esta ferramenta para localizar a referência e depois git_referencia_buscar_codigo (com o id retornado) para ler o código-fonte real do destino, em vez de parar na constatação de que "depende de uma API externa"',
     {
       projeto_id_origem: z
         .number()
@@ -229,6 +230,108 @@ export function registerGitTools({ server, pool, authorize }: ToolContext) {
           { type: 'text' as const, text: JSON.stringify(rows, null, 2) },
         ],
       };
+    },
+  );
+
+  server.tool(
+    'git_referencia_buscar_codigo',
+    'Busca no GitHub (branch main) o código-fonte COMPLETO do arquivo de destino de uma referência cruzada (git_referencias), usando linha/identificador cadastrados apenas como dica de onde olhar — não recorta o arquivo, pois a lógica relevante pode estar abstraída em outro trecho (função auxiliar, import, etc.)',
+    {
+      referencia_id: z
+        .number()
+        .int()
+        .positive()
+        .describe('ID da referência em ai_mcp.git_referencias (retornado por git_referencia_listar ou git_referencia_salvar)'),
+    },
+    async ({ referencia_id }) => {
+      const deny = await authorize('git_referencia_buscar_codigo');
+      if (deny) return deny;
+
+      const [refs] = await pool.execute<any[]>(
+        `SELECT r.*, p.remote_url AS destino_remote_url, p.nome AS destino_nome
+           FROM ai_mcp.git_referencias r
+           JOIN ai_mcp.git_projetos p ON p.id = r.fk_projeto_destino
+          WHERE r.id = ?`,
+        [referencia_id],
+      );
+      if (!refs.length) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Referência ${referencia_id} não encontrada.`,
+            },
+          ],
+        };
+      }
+      const ref = refs[0];
+
+      const token = process.env.GITHUB_TOKEN;
+      if (!token) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Integração com GitHub não configurada: defina GITHUB_TOKEN (com acesso ao repositório de destino) no ambiente do servidor.',
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const repoPath = ref.destino_remote_url.replace(/^github\.com\//, '');
+
+      try {
+        const response = await axios.get(
+          `https://api.github.com/repos/${repoPath}/contents/${ref.caminho_destino}`,
+          {
+            params: { ref: 'main' },
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/vnd.github+json',
+            },
+          },
+        );
+
+        const codigo = Buffer.from(response.data.content, 'base64').toString(
+          'utf8',
+        );
+
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(
+                {
+                  referencia_id,
+                  projeto_destino: ref.destino_nome,
+                  caminho_destino: ref.caminho_destino,
+                  branch: 'main',
+                  dica: {
+                    linha_inicio: ref.linha_inicio_destino,
+                    linha_fim: ref.linha_fim_destino,
+                    identificador: ref.identificador_destino,
+                  },
+                  descricao: ref.descricao,
+                  codigo,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (err: any) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Erro ao buscar código no GitHub (${repoPath}/${ref.caminho_destino}): ${err.response?.data?.message ?? err.message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
     },
   );
 }
