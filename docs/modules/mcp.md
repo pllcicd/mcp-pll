@@ -122,6 +122,10 @@ Ver documentação individual em [`docs/tools/`](../tools/).
 | `admin_list_grants` | `src/tools/admin.tool.ts` | [tools/admin_list_grants.md](../tools/admin_list_grants.md) |
 | `create_github_issue` | `src/tools/github.tool.ts` | [tools/create_github_issue.md](../tools/create_github_issue.md) |
 | `bypass_whatsapp_sent` | `src/tools/mensageria.tool.ts` | [tools/bypass_whatsapp_sent.md](../tools/bypass_whatsapp_sent.md) |
+| `git_projeto_salvar` | `src/tools/git.tool.ts` | [tools/git_projeto_salvar.md](../tools/git_projeto_salvar.md) |
+| `git_projeto_listar` | `src/tools/git.tool.ts` | [tools/git_projeto_listar.md](../tools/git_projeto_listar.md) |
+| `git_referencia_salvar` | `src/tools/git.tool.ts` | [tools/git_referencia_salvar.md](../tools/git_referencia_salvar.md) |
+| `git_referencia_listar` | `src/tools/git.tool.ts` | [tools/git_referencia_listar.md](../tools/git_referencia_listar.md) |
 
 ---
 

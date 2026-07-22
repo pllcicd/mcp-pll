@@ -309,6 +309,48 @@ SELECT id, 'USO' FROM mcp_ferramentas;
 INSERT INTO mcp_perfis_escopo (perfil_codigo, fk_ferramenta_escopo)
 SELECT 'ADMIN', id FROM mcp_ferramentas_escopo;
 
+-- ── Projetos git conhecidos ──────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS git_projetos (
+  id           BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  nome         VARCHAR(255)     NOT NULL,           -- nome amigável do projeto
+  remote_url   VARCHAR(512)     NOT NULL,           -- ex.: github.com/org/repo
+  adicionado   TIMESTAMP        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_git_projetos_remote (remote_url)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ── Referências cruzadas: local exato em um projeto → local exato em outro ───
+-- Genérico projeto→projeto (não amarrado a ferramentas MCP): ex.: um trecho
+-- de código em mcp-pll (origem) chama um endpoint que vive fisicamente em
+-- outro repositório (pll-api-nasajon, destino) — isso registra ONDE dos dois
+-- lados (arquivo/linhas/identificador) para qualquer IA lendo via MCP ir
+-- direto ao ponto, sem precisar (re)explorar nenhum dos dois repositórios.
+CREATE TABLE IF NOT EXISTS git_referencias (
+  id                     BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT,
+
+  fk_projeto_origem      BIGINT UNSIGNED  NOT NULL,           -- projeto de origem (quem depende)
+  caminho_origem         VARCHAR(1024)    NOT NULL,           -- caminho do arquivo no projeto de origem
+  linha_inicio_origem    INT UNSIGNED         NULL,
+  linha_fim_origem       INT UNSIGNED         NULL,
+  identificador_origem   VARCHAR(255)         NULL,           -- ex.: nome da função/ferramenta que depende disso
+
+  fk_projeto_destino     BIGINT UNSIGNED  NOT NULL,           -- projeto de destino (onde o código vive)
+  caminho_destino        VARCHAR(1024)    NOT NULL,           -- caminho do arquivo no projeto de destino
+  linha_inicio_destino   INT UNSIGNED         NULL,
+  linha_fim_destino      INT UNSIGNED         NULL,
+  identificador_destino  VARCHAR(255)         NULL,           -- ex.: nome do endpoint/rota/função referenciado
+
+  descricao              VARCHAR(1024)    NOT NULL DEFAULT '',
+  adicionado             TIMESTAMP        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (id),
+  KEY idx_git_referencias_origem (fk_projeto_origem),
+  KEY idx_git_referencias_destino (fk_projeto_destino),
+  CONSTRAINT fk_git_referencias_origem  FOREIGN KEY (fk_projeto_origem)  REFERENCES git_projetos(id),
+  CONSTRAINT fk_git_referencias_destino FOREIGN KEY (fk_projeto_destino) REFERENCES git_projetos(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 -- ── Permissões ────────────────────────────────────────────────────────────────
 -- Este script não concede GRANTs a usuários. O acesso de leitura/escrita ao
 -- banco `ai_mcp` é gerenciado fora do schema.sql (nível de usuário/infra do

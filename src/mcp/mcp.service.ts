@@ -16,6 +16,7 @@ import { registerColaboradorTools } from '../tools/colaborador.tool';
 import { registerSchemaTools } from '../tools/schema.tool';
 import { registerGithubTools } from '../tools/github.tool';
 import { registerMensageriaTools } from '../tools/mensageria.tool';
+import { registerGitTools } from '../tools/git.tool';
 
 @Injectable()
 export class McpService implements OnModuleInit {
@@ -152,6 +153,7 @@ export class McpService implements OnModuleInit {
     registerSchemaTools(ctx);
     registerGithubTools(ctx);
     registerMensageriaTools(ctx, this.bypassWhatsappSent.bind(this));
+    registerGitTools(ctx);
 
     return server;
   }

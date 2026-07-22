@@ -92,6 +92,10 @@ Todas as ferramentas exigem o escopo **USO** (execução) e, quando aplicável, 
 | `admin_grant_perfil_scope` | Concede um escopo de ferramenta a um perfil | [tools/admin_grant_perfil_scope.md](tools/admin_grant_perfil_scope.md) |
 | `admin_revoke_perfil_scope` | Revoga (soft-delete) um escopo de ferramenta de um perfil | [tools/admin_revoke_perfil_scope.md](tools/admin_revoke_perfil_scope.md) |
 | `admin_list_grants` | Lista as concessões RBAC atuais | [tools/admin_list_grants.md](tools/admin_list_grants.md) |
+| `git_projeto_salvar` | Cadastra/atualiza um projeto git (nome + remote_url) | [tools/git_projeto_salvar.md](tools/git_projeto_salvar.md) |
+| `git_projeto_listar` | Lista os projetos git cadastrados | [tools/git_projeto_listar.md](tools/git_projeto_listar.md) |
+| `git_referencia_salvar` | Registra que uma ferramenta MCP local depende de código físico em outro projeto git (arquivo/linhas/endpoint) | [tools/git_referencia_salvar.md](tools/git_referencia_salvar.md) |
+| `git_referencia_listar` | Lista as referências cruzadas cadastradas, por projeto alvo ou ferramenta local | [tools/git_referencia_listar.md](tools/git_referencia_listar.md) |
 | `create_github_issue` | Cria uma issue no GitHub (ex.: sugestão de nova ferramenta) | [tools/create_github_issue.md](tools/create_github_issue.md) |
 | `bypass_whatsapp_sent` | Força o reenvio de um item da fila `whatsapp_sent`, sobrescrevendo badlist/blacklist (ação sensível, restrita a perfis administrativos) | [tools/bypass_whatsapp_sent.md](tools/bypass_whatsapp_sent.md) |
 
