@@ -24,7 +24,7 @@ export function registerReadSourceTool({
 }: ToolContext) {
   server.tool(
     'read_tool_source',
-    'Lê o código-fonte .ts de uma ferramenta MCP registrada, se o usuário tiver o escopo LEITURA dela. Se o código depender de um endpoint/serviço de outro projeto, use git_referencia_listar (filtrando por projeto_id_origem = mcp-pll) para localizar a referência cruzada e git_referencia_buscar_codigo para ler o código real do destino, em vez de só constatar que "depende de uma API externa"',
+    'Lê o código-fonte .ts de uma ferramenta MCP registrada, se o usuário tiver o escopo LEITURA dela. Se o código depender de um endpoint/serviço de outro projeto, use git_referencia_listar (filtrando por projeto_id_origem = mcp-pll) para localizar a referência cruzada (projeto/caminho/linhas/identificador de destino) e então use o conector GitHub (fora deste servidor MCP) para ler o código real naquele projeto/caminho, em vez de só constatar que "depende de uma API externa"',
     {
       tool_name: z
         .string()
